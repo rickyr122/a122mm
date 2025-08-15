@@ -40,8 +40,8 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.ThumbUp
+import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.ThumbUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -605,13 +605,13 @@ fun MovieDetailContent(
                                         Box(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .height(3.dp)
-                                                .background(Color.DarkGray.copy(alpha = 0.6f))
+                                                .height(2.dp)
+                                                .background(Color(0xFF999999)) //.copy(alpha = 0.6f))
                                         ) {
                                             Box(
                                                 modifier = Modifier
                                                     .fillMaxWidth(progress.coerceIn(0f, 1f))
-                                                    .height(3.dp)
+                                                    .height(2.dp)
                                                     .background(Color.Red)
                                             )
                                         }
@@ -759,8 +759,8 @@ fun MovieDetailContent(
                                 }
                             }
 
-                            MovieAction(icon = Icons.Filled.ThumbUp, label = "Rate")
-                            MovieAction(icon = Icons.Filled.Share, label = "Share")
+                            MovieAction(icon = Icons.Outlined.ThumbUp, label = "Rate")
+                            MovieAction(icon = Icons.Outlined.Share, label = "Share")
                         }
 
 

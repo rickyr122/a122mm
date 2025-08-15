@@ -119,7 +119,7 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
         BottomNavItem("Home", Icons.Filled.Home, Icons.Outlined.Home),
         BottomNavItem( "Search",Icons.Filled.Search, Icons.Outlined.Search),
         BottomNavItem("Highlights", Icons.Filled.VideoLibrary, Icons.Outlined.VideoLibrary),
-        BottomNavItem("Profile", Icons.Filled.Person, Icons.Outlined.Person, isImage = true)
+        BottomNavItem("My Room", Icons.Filled.Person, Icons.Outlined.Person, isImage = true)
     )
 
     val systemBars = WindowInsets.systemBars.asPaddingValues()
