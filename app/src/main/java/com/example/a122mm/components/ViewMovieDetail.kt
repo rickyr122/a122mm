@@ -780,11 +780,13 @@ fun MovieDetailContent(
                                 modifier = Modifier
                                     .weight(1f)
                                     .clickable {
-                                        hasRated = -5
-                                        Toast.makeText(context, "You rated: Not for me", Toast.LENGTH_SHORT).show()
+                                        val newRating = if (hasRated == -5) 0 else -5 // toggle
+                                        hasRated = newRating
+                                        val message = if (newRating == 0) "Rating cleared" else "You rated: Not for me"
+                                        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                                         scope.launch(Dispatchers.IO) {
                                             try {
-                                                api.rateMovie(movie.m_id, -5)
+                                                api.rateMovie(movie.m_id, newRating)
                                             } catch (e: Exception) {
                                                 Log.e("Rate", "Error rating -5", e)
                                             }
@@ -792,7 +794,7 @@ fun MovieDetailContent(
                                     },
                                 contentAlignment = Alignment.Center
                             ) {
-                                MovieAction(icon = painterResource(id = thumbDownIcon), label = "Not for me")
+                                MovieAction(icon = painterResource(id = thumbDownIcon), label = "Not for Me")
                             }
 
                             // --- I like this ---
@@ -801,11 +803,13 @@ fun MovieDetailContent(
                                 modifier = Modifier
                                     .weight(1f)
                                     .clickable {
-                                        hasRated = 5
-                                        Toast.makeText(context, "You rated: I like this", Toast.LENGTH_SHORT).show()
+                                        val newRating = if (hasRated == 5) 0 else 5 // toggle
+                                        hasRated = newRating
+                                        val message = if (newRating == 0) "Rating cleared" else "You rated: I like this"
+                                        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                                         scope.launch(Dispatchers.IO) {
                                             try {
-                                                api.rateMovie(movie.m_id, 5)
+                                                api.rateMovie(movie.m_id, newRating)
                                             } catch (e: Exception) {
                                                 Log.e("Rate", "Error rating 5", e)
                                             }
@@ -813,7 +817,7 @@ fun MovieDetailContent(
                                     },
                                 contentAlignment = Alignment.Center
                             ) {
-                                MovieAction(icon = painterResource(id = thumbUpIcon), label = "I like this")
+                                MovieAction(icon = painterResource(id = thumbUpIcon), label = "I Like This")
                             }
 
                             // --- Love this ---
@@ -822,11 +826,13 @@ fun MovieDetailContent(
                                 modifier = Modifier
                                     .weight(1f)
                                     .clickable {
-                                        hasRated = 10
-                                        Toast.makeText(context, "You rated: Love this", Toast.LENGTH_SHORT).show()
+                                        val newRating = if (hasRated == 10) 0 else 10 // toggle
+                                        hasRated = newRating
+                                        val message = if (newRating == 0) "Rating cleared" else "You rated: Love this"
+                                        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                                         scope.launch(Dispatchers.IO) {
                                             try {
-                                                api.rateMovie(movie.m_id, 10)
+                                                api.rateMovie(movie.m_id, newRating)
                                             } catch (e: Exception) {
                                                 Log.e("Rate", "Error rating 10", e)
                                             }
@@ -834,11 +840,9 @@ fun MovieDetailContent(
                                     },
                                 contentAlignment = Alignment.Center
                             ) {
-                                MovieAction(icon = painterResource(id = thumbUpDoubleIcon), label = "Love this")
+                                MovieAction(icon = painterResource(id = thumbUpDoubleIcon), label = "Love This")
                             }
                         }
-
-
 
                         Spacer(Modifier.height(32.dp))
 
