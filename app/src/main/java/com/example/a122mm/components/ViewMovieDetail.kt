@@ -168,6 +168,14 @@ interface MovieApiService {
     @POST("removemylist")
     suspend fun removeFromMyList(@Field("mId") mId: String
     ): retrofit2.Response<Unit>
+
+    @FormUrlEncoded
+    @POST("addratemovie")
+    suspend fun rateMovie(
+        @Field("mId") mId: String,
+        @Field("rating") rating: Int
+    ): retrofit2.Response<Unit>
+
 }
 
 @Composable
@@ -699,22 +707,30 @@ fun MovieDetailContent(
                         }
                         Spacer(Modifier.height(24.dp))
 
-                        val scopes = rememberCoroutineScope()
+                        val scope = rememberCoroutineScope()
                         val context = LocalContext.current
                         var isLoading by remember { mutableStateOf(false) }
                         var movieInList by remember { mutableStateOf(movie.inList) }
 
+                        // State for rating
+                        var hasRated by remember { mutableStateOf(movie.hasRated) }
+//                        val scope = rememberCoroutineScope()
+//                        val context = LocalContext.current
+
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceEvenly
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // My List Button (Interactive)
+                            // --- My List ---
                             val sId = if (movie.m_id.startsWith("MOV")) movie.m_id else movie.gId
                             Box(
                                 modifier = Modifier
+                                    .weight(1f)
                                     .clickable(enabled = !isLoading) {
                                         isLoading = true
-                                        scopes.launch(Dispatchers.IO) {
+                                        scope.launch(Dispatchers.IO) {
                                             try {
                                                 val isCurrentlyInList = movieInList == "1"
                                                 val newInListValue = if (isCurrentlyInList) "0" else "1"
@@ -727,8 +743,8 @@ fun MovieDetailContent(
                                                 if (response.isSuccessful) {
                                                     withContext(Dispatchers.Main) {
                                                         movieInList = newInListValue
-                                                        updateInList(movie.m_id, newInListValue, context) // optional cache sync
-                                                        onMyListChanged() // ✅ triggers ViewBanner + ViewContent refresh
+                                                        updateInList(movie.m_id, newInListValue, context)
+                                                        onMyListChanged()
                                                         Toast.makeText(
                                                             context,
                                                             if (newInListValue == "1") "Added to My List" else "Removed from My List",
@@ -739,12 +755,11 @@ fun MovieDetailContent(
                                             } catch (e: Exception) {
                                                 Log.e("MyList", "Error", e)
                                             } finally {
-                                                withContext(Dispatchers.Main) {
-                                                    isLoading = false
-                                                }
+                                                withContext(Dispatchers.Main) { isLoading = false }
                                             }
                                         }
-                                    }
+                                    },
+                                contentAlignment = Alignment.Center
                             ) {
                                 if (isLoading) {
                                     CircularProgressIndicator(
@@ -759,29 +774,70 @@ fun MovieDetailContent(
                                 }
                             }
 
-                            // 👇 choose icon based on hasRated
-                            val thumbDownIcon = if (movie.hasRated == -5) {
-                                R.drawable.ic_thumb_down_filled
-                            } else {
-                                R.drawable.ic_thumb_down
+                            // --- Not for me ---
+                            val thumbDownIcon = if (hasRated == -5) R.drawable.ic_thumb_down_filled else R.drawable.ic_thumb_down
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable {
+                                        hasRated = -5
+                                        Toast.makeText(context, "You rated: Not for me", Toast.LENGTH_SHORT).show()
+                                        scope.launch(Dispatchers.IO) {
+                                            try {
+                                                api.rateMovie(movie.m_id, -5)
+                                            } catch (e: Exception) {
+                                                Log.e("Rate", "Error rating -5", e)
+                                            }
+                                        }
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                MovieAction(icon = painterResource(id = thumbDownIcon), label = "Not for me")
                             }
 
-                            val thumbUpIcon = if (movie.hasRated == 5) {
-                                R.drawable.ic_thumb_up_filled
-                            } else {
-                                R.drawable.ic_thumb_up
+                            // --- I like this ---
+                            val thumbUpIcon = if (hasRated == 5) R.drawable.ic_thumb_up_filled else R.drawable.ic_thumb_up
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable {
+                                        hasRated = 5
+                                        Toast.makeText(context, "You rated: I like this", Toast.LENGTH_SHORT).show()
+                                        scope.launch(Dispatchers.IO) {
+                                            try {
+                                                api.rateMovie(movie.m_id, 5)
+                                            } catch (e: Exception) {
+                                                Log.e("Rate", "Error rating 5", e)
+                                            }
+                                        }
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                MovieAction(icon = painterResource(id = thumbUpIcon), label = "I like this")
                             }
 
-                            val thumbUpDoubleIcon = if (movie.hasRated == 10) {
-                                R.drawable.ic_thumb_up_double_filled
-                            } else {
-                                R.drawable.ic_thumb_up_double
+                            // --- Love this ---
+                            val thumbUpDoubleIcon = if (hasRated == 10) R.drawable.ic_thumb_up_double_filled else R.drawable.ic_thumb_up_double
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable {
+                                        hasRated = 10
+                                        Toast.makeText(context, "You rated: Love this", Toast.LENGTH_SHORT).show()
+                                        scope.launch(Dispatchers.IO) {
+                                            try {
+                                                api.rateMovie(movie.m_id, 10)
+                                            } catch (e: Exception) {
+                                                Log.e("Rate", "Error rating 10", e)
+                                            }
+                                        }
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                MovieAction(icon = painterResource(id = thumbUpDoubleIcon), label = "Love this")
                             }
-
-                            MovieAction(icon = painterResource(id = thumbDownIcon), label = "Not for me")
-                            MovieAction(icon = painterResource(id = thumbUpIcon), label = "I like this")
-                            MovieAction(icon = painterResource(id = thumbUpDoubleIcon), label = "Love this")
                         }
+
 
 
                         Spacer(Modifier.height(32.dp))
@@ -854,7 +910,7 @@ fun MovieDetailContent(
 
                         }
                         // Tab Content
-                        val scope = rememberCoroutineScope()
+                        //val scope = rememberCoroutineScope()
                         when (tabTitles[selectedTabIndex]) {
                             "Episodes" -> {
                                 when {
