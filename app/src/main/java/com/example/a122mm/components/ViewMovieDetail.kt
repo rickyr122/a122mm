@@ -5,8 +5,20 @@ import android.content.Context
 import android.content.res.Configuration
 import android.util.Log
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.AnimationVector1D
+import androidx.compose.animation.core.TwoWayConverter
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateValue
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.updateTransition
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,6 +39,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Divider
@@ -40,7 +53,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.HighlightOff
 import androidx.compose.material.icons.outlined.ThumbUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -48,17 +61,22 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -759,8 +777,48 @@ fun MovieDetailContent(
                                 }
                             }
 
-                            MovieAction(icon = Icons.Outlined.ThumbUp, label = "Rate")
-                            MovieAction(icon = Icons.Outlined.Share, label = "Share")
+//                          MovieAction(icon = Icons.Outlined.ThumbUp, label = "Rate")
+                            var isRated by rememberSaveable { mutableStateOf(false) }
+                            val interaction = remember { MutableInteractionSource() }
+                            val pressed by interaction.collectIsPressedAsState()
+                            val pressScale by animateFloatAsState(
+                                targetValue = if (pressed) 0.95f else 1f,
+                                animationSpec = spring(stiffness = 400f),
+                                label = "pressScale"
+                            )
+
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    imageVector = if (isRated) Icons.Outlined.HighlightOff else Icons.Outlined.ThumbUp,
+                                    contentDescription = "Rate",
+                                    tint = Color.White,
+                                    modifier = Modifier
+                                        .size(28.dp)
+                                        .scale(pressScale)
+                                        .clip(CircleShape)
+                                        .clickable(
+                                            interactionSource = interaction,
+                                            indication = ripple(bounded = true, color = Color.White)
+                                        ) {
+                                            isRated = !isRated
+                                        }
+                                )
+
+                                AnimatedVisibility(
+                                    visible = !isRated,
+                                    enter = fadeIn(),
+                                    exit = fadeOut()
+                                ) {
+                                    Text(
+                                        text = "Rate",
+                                        color = Color.White,
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                }
+                            }
+
+
+                            //MovieAction(icon = Icons.Outlined.Share, label = "Share")
                         }
 
 
@@ -1028,6 +1086,19 @@ fun MovieAction(icon: ImageVector, label: String) {
         Icon(icon, contentDescription = label, tint = Color.White)
         Text(text = label, color = Color.White, style = MaterialTheme.typography.labelSmall)
     }
+}
+
+@Composable
+fun animateIconAsState(targetIcon: ImageVector): State<ImageVector> {
+    val transition = updateTransition(targetIcon, label = "iconTransition")
+    return transition.animateValue(
+        transitionSpec = { tween(durationMillis = 300) }, // smooth swap
+        typeConverter = TwoWayConverter(
+            convertToVector = { _ -> AnimationVector1D(0f) },
+            convertFromVector = { _ -> targetIcon }
+        ),
+        label = "iconAnim"
+    ) { state -> state }
 }
 
 //fun updateInList(mId: String, inList: String, context: Context) {
