@@ -18,18 +18,6 @@ import com.example.a122mm.components.ViewContinue
 import com.example.a122mm.dataclass.HomeViewModel
 import com.example.a122mm.dataclass.Section
 
-//interface ApiHomeCodesService  {
-//    @GET("gethomecodes")
-//    suspend fun getHomeCodes(
-//        @Query("type") type: String
-//    ): List<Int>
-//}
-////val apiService = ApiClient.create(ApiHomeCodesService::class.java)
-//sealed class Section {
-//    object Continue : Section()
-//    data class Category(val code: Int) : Section()
-//}
-
 @Composable
 fun HomePage(
     modifier: Modifier = Modifier,
@@ -41,10 +29,6 @@ fun HomePage(
     val isLoading = viewModel.isLoading
     val allSections = viewModel.allSections
 
-//    LaunchedEffect(Unit) {
-//        viewModel.loadHomeCodes(type)
-//    }
-    //Spacer(modifier = Modifier.height(14.dp))
     Column (
         modifier = modifier // ✅ use the passed-in modifier
             .fillMaxSize()

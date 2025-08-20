@@ -104,14 +104,6 @@ class PosterPagingSource(
     }
 }
 
-//    override fun getRefreshKey(state: PagingState<Int, UnwatchedResponseContent>): Int? {
-//        return state.anchorPosition?.let { anchor ->
-//            state.closestPageToPosition(anchor)?.prevKey?.plus(1)
-//                ?: state.closestPageToPosition(anchor)?.nextKey?.minus(1)
-//        }
-//    }
-//}
-
 class PosterViewModel(private val code: Int) : ViewModel() {
     private val apiService = ApiClient.create(ApiServiceContent::class.java)
 

@@ -67,6 +67,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -259,7 +260,7 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
             ) {
                 navItems.forEachIndexed { index, item ->
                     val isSelected = selectedItem == index
-                    val isProfile = item.label == "Profile"
+                    val isProfile = item.label == "My Room"
 
                     NavigationBarItem(
                         selected = isSelected,
@@ -301,10 +302,13 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
             }
         }
     ) { innerPadding ->
+
         Box(
             modifier = Modifier
-                .fillMaxSize()
-                .background(backgroundBrush)
+                .background(
+                    if (selectedItem == 0) backgroundBrush
+                    else SolidColor(Color.Black)
+                )
         ) {
 
             ContentScreen(
@@ -499,7 +503,7 @@ fun ContentScreen(
                 }
                 1 -> SearchPage(pageModifier)
                 2 -> FavoritesPage(pageModifier)
-                3 -> ProfilePage(pageModifier)
+                3 -> ProfilePage(pageModifier,navController, onDominantColorExtracted, type = "PRO")
             }
         }
     }
