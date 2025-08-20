@@ -25,7 +25,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.Info
@@ -51,9 +50,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -64,7 +65,9 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
+import com.example.a122mm.R
 import com.example.a122mm.dataclass.ApiClient
+import com.example.a122mm.helper.fixEncoding
 import com.google.accompanist.systemuicontroller.rememberSystemUiController
 import kotlinx.coroutines.launch
 import retrofit2.http.Field
@@ -389,7 +392,7 @@ fun ViewContinue(
         ) {
             Column(Modifier.padding(16.dp)) {
                 Text(
-                    text = selectedPoster?.mTitle?.replace("`", "'") ?: "",
+                    text = selectedPoster?.mTitle?.fixEncoding() ?: "",
                     color = Color.White,
                     fontWeight = FontWeight.Bold,
                     fontSize = 18.sp,
@@ -402,10 +405,13 @@ fun ViewContinue(
                 }
 
 //                BottomSheetItem("Download Episode", Icons.Default.Download) { /* TODO */ }
-//                BottomSheetItem("Not For Me", Icons.Default.ThumbDown) { /* TODO */ }
-//                BottomSheetItem("I Like It", Icons.Default.ThumbUp) { /* TODO */ }
-//                BottomSheetItem("Love This", Icons.Default.ThumbUpAlt) { /* TODO */ }
-                BottomSheetItem("Remove From Row", Icons.Filled.Close) {
+                BottomSheetItem("Not For Me", icon = painterResource(id = R.drawable.ic_thumb_down)) { /* TODO */ }
+                BottomSheetItem("I Like It", icon = painterResource(id = R.drawable.ic_thumb_up)) { /* TODO */ }
+                BottomSheetItem("Love This", icon = painterResource(id = R.drawable.ic_thumb_up_double)) { /* TODO */ }
+                BottomSheetItem(
+                    "Remove From Row",
+                    icon = painterResource(id = R.drawable.ic_cancel)
+                ) {
                     selectedPoster?.let { poster ->
                         viewModel.removeItemFromContinue(poster.mId) {
                             coroutineScope.launch {
@@ -420,6 +426,7 @@ fun ViewContinue(
     }
 }
 
+// For ImageVector icons (Material icons)
 @Composable
 fun BottomSheetItem(label: String, icon: ImageVector, onClick: () -> Unit) {
     Row(
@@ -429,10 +436,31 @@ fun BottomSheetItem(label: String, icon: ImageVector, onClick: () -> Unit) {
             .padding(vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, contentDescription = label, tint = Color.White)
+        Icon(imageVector = icon, contentDescription = label, tint = Color.White)
         Spacer(Modifier.width(16.dp))
         Text(text = label, color = Color.White, fontSize = 16.sp)
     }
 }
+
+// For drawable resources
+@Composable
+fun BottomSheetItem(label: String, icon: Painter, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            painter = icon,
+            contentDescription = label,
+            tint = Color.White
+        )
+        Spacer(Modifier.width(16.dp))
+        Text(text = label, color = Color.White, fontSize = 16.sp)
+    }
+}
+
 
 

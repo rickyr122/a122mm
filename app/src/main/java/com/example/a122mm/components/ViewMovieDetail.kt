@@ -83,6 +83,7 @@ import coil.compose.AsyncImage
 import com.example.a122mm.R
 import com.example.a122mm.dataclass.NetworkModule
 import com.example.a122mm.dataclass.NetworkModule.mApiService
+import com.example.a122mm.helper.fixEncoding
 import com.example.a122mm.sections.CollectionItem
 import com.example.a122mm.sections.EpisodeData
 import com.example.a122mm.sections.MoreLikeThisItem
@@ -603,7 +604,7 @@ fun MovieDetailContent(
                                 Column(modifier = Modifier.weight(1.5f)) {
                                     if (movie.m_title != "") {
                                         Text(
-                                            text = movie.m_title.replace("`", "'"),
+                                            text = movie.m_title.fixEncoding(),
                                             color = Color.White,
                                             fontSize = 14.sp,
                                             fontWeight = FontWeight.SemiBold,
@@ -670,7 +671,7 @@ fun MovieDetailContent(
                                 .fillMaxWidth()
                                 .padding(horizontal = 8.dp)
                         ) {
-                            Text(text = movie.m_description.replace("`", "'"), color = Color.White)
+                            Text(text = movie.m_description.fixEncoding(), color = Color.White)
                             Spacer(Modifier.height(8.dp))
 
                             Text(
@@ -690,7 +691,7 @@ fun MovieDetailContent(
                                 style = MaterialTheme.typography.bodySmall
                             )
                             if (movie.m_id.startsWith("MOV")) {
-                                Log.d("MovieDetail", "Director: '${movie.m_director}'")
+                                //Log.d("MovieDetail", "Director: '${movie.m_director.fixEncoding()}'")
                                 Text(
                                     text = buildAnnotatedString {
                                         withStyle(
@@ -702,7 +703,7 @@ fun MovieDetailContent(
                                             append("Director: ")
                                         }
                                         withStyle(style = SpanStyle(color = Color(0xFFB3B3B3))) {
-                                            append(movie.m_director)
+                                            append(movie.m_director.fixEncoding())
                                         }
                                     },
                                     style = MaterialTheme.typography.bodySmall
@@ -718,63 +719,6 @@ fun MovieDetailContent(
 
                         // State for rating
                         var hasRated by remember { mutableStateOf(movie.hasRated) }
-//                        val scope = rememberCoroutineScope()
-//                        val context = LocalContext.current
-
-//                        Row(
-//                            modifier = Modifier
-//                                .fillMaxWidth()
-//                                .padding(horizontal = 8.dp),
-//                            verticalAlignment = Alignment.CenterVertically
-//                        ) {
-                            // --- My List ---
-//                            val sId = if (movie.m_id.startsWith("MOV")) movie.m_id else movie.gId
-//                            Box(
-//                                modifier = Modifier
-//                                    .weight(1f)
-//                                    .clickable(enabled = !isLoading) {
-//                                        isLoading = true
-//                                        scope.launch(Dispatchers.IO) {
-//                                            try {
-//                                                val isCurrentlyInList = movieInList == "1"
-//                                                val newInListValue = if (isCurrentlyInList) "0" else "1"
-//                                                val response = if (isCurrentlyInList) {
-//                                                    api.removeFromMyList(sId)
-//                                                } else {
-//                                                    api.addToMyList(sId)
-//                                                }
-//
-//                                                if (response.isSuccessful) {
-//                                                    withContext(Dispatchers.Main) {
-//                                                        movieInList = newInListValue
-//                                                        updateInList(movie.m_id, newInListValue, context)
-//                                                        onMyListChanged()
-//                                                        Toast.makeText(
-//                                                            context,
-//                                                            if (newInListValue == "1") "Added to My List" else "Removed from My List",
-//                                                            Toast.LENGTH_SHORT
-//                                                        ).show()
-//                                                    }
-//                                                }
-//                                            } catch (e: Exception) {
-//                                                Log.e("MyList", "Error", e)
-//                                            } finally {
-//                                                withContext(Dispatchers.Main) { isLoading = false }
-//                                            }
-//                                        }
-//                                    },
-//                                contentAlignment = Alignment.Center
-//                            ) {
-//
-//                                    val icon =
-//                                        if (movieInList == "1") Icons.Filled.Check else Icons.Filled.Add
-//                                    MovieActionVector(
-//                                        icon = if (movieInList == "1") Icons.Filled.Check else Icons.Filled.Add,
-//                                        label = "My List",
-//                                        isLoading = isLoading
-//                                    )
-//
-//                            }
 
                         Row(
                             modifier = Modifier
@@ -829,8 +773,8 @@ fun MovieDetailContent(
                                 ) {
                                     val newRating = if (hasRated == -5) 0 else -5
                                     hasRated = newRating
-                                    val message = if (newRating == 0) "Rating cleared" else "You rated: Not for me"
-                                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                                    //val message = if (newRating == 0) "Rating cleared" else "You rated: Not for me"
+                                    //Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                                     scope.launch(Dispatchers.IO) {
                                         try { api.rateMovie(movie.m_id, newRating) }
                                         catch (e: Exception) { Log.e("Rate", "Error rating -5", e) }
@@ -847,8 +791,8 @@ fun MovieDetailContent(
                                 ) {
                                     val newRating = if (hasRated == 5) 0 else 5
                                     hasRated = newRating
-                                    val message = if (newRating == 0) "Rating cleared" else "You rated: I like this"
-                                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+//                                    val message = if (newRating == 0) "Rating cleared" else "You rated: I like this"
+//                                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                                     scope.launch(Dispatchers.IO) {
                                         try { api.rateMovie(movie.m_id, newRating) }
                                         catch (e: Exception) { Log.e("Rate", "Error rating 5", e) }
@@ -865,8 +809,8 @@ fun MovieDetailContent(
                                 ) {
                                     val newRating = if (hasRated == 10) 0 else 10
                                     hasRated = newRating
-                                    val message = if (newRating == 0) "Rating cleared" else "You rated: Love this"
-                                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+//                                    val message = if (newRating == 0) "Rating cleared" else "You rated: Love this"
+//                                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                                     scope.launch(Dispatchers.IO) {
                                         try { api.rateMovie(movie.m_id, newRating) }
                                         catch (e: Exception) { Log.e("Rate", "Error rating 10", e) }
