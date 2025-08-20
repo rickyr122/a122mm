@@ -776,7 +776,7 @@ fun MovieDetailContent(
                                     //val message = if (newRating == 0) "Rating cleared" else "You rated: Not for me"
                                     //Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                                     scope.launch(Dispatchers.IO) {
-                                        try { api.rateMovie(movie.m_id, newRating) }
+                                        try { api.rateMovie(sId, newRating) }
                                         catch (e: Exception) { Log.e("Rate", "Error rating -5", e) }
                                     }
                                 }
@@ -794,7 +794,7 @@ fun MovieDetailContent(
 //                                    val message = if (newRating == 0) "Rating cleared" else "You rated: I like this"
 //                                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                                     scope.launch(Dispatchers.IO) {
-                                        try { api.rateMovie(movie.m_id, newRating) }
+                                        try { api.rateMovie(sId, newRating) }
                                         catch (e: Exception) { Log.e("Rate", "Error rating 5", e) }
                                     }
                                 }
@@ -812,7 +812,7 @@ fun MovieDetailContent(
 //                                    val message = if (newRating == 0) "Rating cleared" else "You rated: Love this"
 //                                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                                     scope.launch(Dispatchers.IO) {
-                                        try { api.rateMovie(movie.m_id, newRating) }
+                                        try { api.rateMovie(sId, newRating) }
                                         catch (e: Exception) { Log.e("Rate", "Error rating 10", e) }
                                     }
                                 }

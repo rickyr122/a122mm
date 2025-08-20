@@ -1,6 +1,7 @@
 package com.example.a122mm.components
 
 import android.util.Log
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -50,6 +51,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -69,6 +71,7 @@ import com.example.a122mm.R
 import com.example.a122mm.dataclass.ApiClient
 import com.example.a122mm.helper.fixEncoding
 import com.google.accompanist.systemuicontroller.rememberSystemUiController
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import retrofit2.http.Field
 import retrofit2.http.FormUrlEncoded
@@ -81,7 +84,8 @@ data class ContinueWatchingResponseContent(
     val cvrUrl: String,
     val cPercent: Double?,
     val seasonNum: String?,
-    val duration: Int
+    val duration: Int,
+    val hasRated: Int
 )
 
 interface ApiServiceContent2 {
@@ -91,9 +95,23 @@ interface ApiServiceContent2 {
     @FormUrlEncoded
     @POST("removecontinue")
     suspend fun removecontinue(@Field("mId") mId: String): RemoveResponse
+
+    @FormUrlEncoded
+    @POST("addratemovie")
+    suspend fun rateMovie(
+        @Field("mId") mId: String,
+        @Field("rating") rating: Int
+    ): retrofit2.Response<Unit>
 }
 
 data class RemoveResponse(val success: Boolean)
+
+data class RatingOption(
+    val value: Int,
+    val label: String,
+    val icon: Int,         // drawable resource id
+    val filledIcon: Int    // drawable when selected
+)
 
 class PosterViewModel2 : ViewModel() {
     private val apiService = ApiClient.create(ApiServiceContent2::class.java)
@@ -137,6 +155,24 @@ class PosterViewModel2 : ViewModel() {
 //                posters2 = emptyList()
                 _posters2.value = emptyList()
                 e.printStackTrace()
+            }
+        }
+    }
+
+    fun rateMovie(mId: String, rating: Int, onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            try {
+                val response = apiService.rateMovie(mId, rating)
+                if (response.isSuccessful) {
+                    // Refresh posters so the updated hasRated value comes in
+                    fetchPosters()
+                } else {
+                    Log.e("RATE", "Failed: ${response.code()} ${response.message()}")
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                onComplete()
             }
         }
     }
@@ -405,9 +441,45 @@ fun ViewContinue(
                 }
 
 //                BottomSheetItem("Download Episode", Icons.Default.Download) { /* TODO */ }
-                BottomSheetItem("Not For Me", icon = painterResource(id = R.drawable.ic_thumb_down)) { /* TODO */ }
-                BottomSheetItem("I Like It", icon = painterResource(id = R.drawable.ic_thumb_up)) { /* TODO */ }
-                BottomSheetItem("Love This", icon = painterResource(id = R.drawable.ic_thumb_up_double)) { /* TODO */ }
+                // Define all rating options
+                val ratingOptions = listOf(
+                    RatingOption(-5, "Not For Me", R.drawable.ic_thumb_down, R.drawable.ic_thumb_down_filled),
+                    RatingOption(5, "I Like It", R.drawable.ic_thumb_up, R.drawable.ic_thumb_up_filled),
+                    RatingOption(10, "Love This", R.drawable.ic_thumb_up_double, R.drawable.ic_thumb_up_double_filled)
+                )
+
+                val hasRated = selectedPoster?.hasRated ?: 0
+                var localHasRated by remember { mutableStateOf(hasRated) }
+
+                LaunchedEffect(selectedPoster) {
+                    // reset local state whenever a new poster is opened
+                    localHasRated = selectedPoster?.hasRated ?: 0
+                }
+
+                ratingOptions.forEach { option ->
+                    val isSelected = option.value == localHasRated
+                    val iconRes = if (isSelected) option.filledIcon else option.icon
+
+                    AnimatedBottomSheetItem(
+                        label = option.label,
+                        iconRes = iconRes,
+                        isSelected = isSelected
+                    ) {
+                        selectedPoster?.let { poster ->
+                            val newRating = if (isSelected) 0 else option.value
+                            localHasRated = newRating
+
+                            viewModel.rateMovie(poster.mId, newRating) {
+                                coroutineScope.launch {
+                                    delay(1000)
+                                    sheetState.hide()
+                                }
+                            }
+                        }
+                    }
+                }
+
+
                 BottomSheetItem(
                     "Remove From Row",
                     icon = painterResource(id = R.drawable.ic_cancel)
@@ -461,6 +533,48 @@ fun BottomSheetItem(label: String, icon: Painter, onClick: () -> Unit) {
         Text(text = label, color = Color.White, fontSize = 16.sp)
     }
 }
+
+@Composable
+fun AnimatedBottomSheetItem(
+    label: String,
+    iconRes: Int,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    val rotation = remember { androidx.compose.animation.core.Animatable(0f) }
+    val scope = rememberCoroutineScope()
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable {
+                // run tilt animation inside coroutine
+                scope.launch {
+                    rotation.snapTo(0f)
+                    rotation.animateTo(
+                        targetValue = if (isSelected) 10f else -10f,
+                        animationSpec = tween(150)
+                    )
+                    rotation.animateTo(0f, animationSpec = tween(150))
+                }
+                onClick()
+            }
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            painter = painterResource(id = iconRes),
+            contentDescription = label,
+            tint = Color.White,
+            modifier = Modifier.graphicsLayer {
+                rotationZ = rotation.value
+            }
+        )
+        Spacer(Modifier.width(16.dp))
+        Text(text = label, color = Color.White, fontSize = 16.sp)
+    }
+}
+
 
 
 
