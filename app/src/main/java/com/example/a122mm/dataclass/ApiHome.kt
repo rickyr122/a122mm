@@ -14,3 +14,10 @@ sealed class Section {
     object Continue : Section()
     data class Category(val code: Int) : Section()
 }
+
+sealed class ProfileSection {
+    object Continue : ProfileSection()
+    object RecentWatch : ProfileSection()
+    data class Category(val code: Int) : ProfileSection()
+}
+

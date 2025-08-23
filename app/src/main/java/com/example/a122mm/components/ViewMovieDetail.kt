@@ -685,7 +685,7 @@ fun MovieDetailContent(
                                         append("Starring: ")
                                     }
                                     withStyle(style = SpanStyle(color = Color(0xFFB3B3B3))) {
-                                        append(movie.m_starring)
+                                        append(movie.m_starring.fixEncoding())
                                     }
                                 },
                                 style = MaterialTheme.typography.bodySmall

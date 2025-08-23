@@ -17,24 +17,14 @@ class ProfileViewModel : ViewModel() {
     var isLoading by mutableStateOf(true)
         private set
 
-    val allSections: List<Section> by derivedStateOf {
-        val filtered = codes.filter { it != 0 }
-        (listOf(Section.Continue) + filtered.map { Section.Category(it) }).shuffled()
+    val blocked = setOf(0, 17)
+    val allSections: List<ProfileSection> by derivedStateOf {
+        val filtered = codes.filterNot { it in blocked }
+        listOf(
+            ProfileSection.Continue,
+            ProfileSection.RecentWatch
+        ) + filtered.map { ProfileSection.Category(it) }
     }
-
-//    init {
-//        viewModelScope.launch {
-//            try {
-//                val apiService = ApiClient.create(ApiHomeCodesService::class.java)
-//                val response = apiService.getHomeCodes()
-//                codes = response
-//            } catch (e: Exception) {
-//                e.printStackTrace()
-//            } finally {
-//                isLoading = false
-//            }
-//        }
-//    }
 
     private val _refreshTrigger = MutableStateFlow(0)
     //    val refreshTrigger: StateFlow<Boolean> = _refreshTrigger

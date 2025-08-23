@@ -16,8 +16,9 @@ import androidx.navigation.NavController
 import com.example.a122mm.components.ProfileHeader
 import com.example.a122mm.components.ViewContent
 import com.example.a122mm.components.ViewContinue
+import com.example.a122mm.components.ViewRecentWatch
+import com.example.a122mm.dataclass.ProfileSection
 import com.example.a122mm.dataclass.ProfileViewModel
-import com.example.a122mm.dataclass.Section
 
 @Composable
 fun ProfilePage(
@@ -50,7 +51,7 @@ fun ProfilePage(
             val refreshTrigger = viewModel.refreshTrigger.collectAsState()
             allSections.forEach { section ->
                 when (section) {
-                    is Section.Continue -> ViewContinue(
+                    is ProfileSection.Continue -> ViewContinue(
                         modifier,
                         navController,
                         refreshTrigger = refreshTrigger.value,
@@ -58,7 +59,7 @@ fun ProfilePage(
                         currentTabIndex = 3,
                         type = type
                     )
-                    is Section.Category -> ViewContent(
+                    is ProfileSection.Category -> ViewContent(
                         modifier,
                         section.code,
                         navController,
@@ -67,8 +68,17 @@ fun ProfilePage(
                         currentTabIndex = 3,
                         type = type
                     )
+                    is ProfileSection.RecentWatch -> ViewRecentWatch(
+                        modifier,
+                        navController,
+                        refreshTrigger = refreshTrigger.value,
+                        onRefreshTriggered = { viewModel.triggerRefresh() },
+                        currentTabIndex = 3,
+                        type = type
+                    )
                 }
             }
+
         }
     }
 }
