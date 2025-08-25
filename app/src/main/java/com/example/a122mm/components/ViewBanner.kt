@@ -311,6 +311,10 @@ fun ViewBanner(
                                                             inList = newInListValue
                                                         )
                                                         onMyListChanged() // notify HomePage to refresh ViewContent
+
+                                                        navController.currentBackStackEntry
+                                                            ?.savedStateHandle
+                                                            ?.set("refreshContent", true)
                                                     }
                                                 }
                                             } catch (e: Exception) {

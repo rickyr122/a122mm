@@ -20,11 +20,14 @@ class ProfileViewModel : ViewModel() {
     val blocked = setOf(0, 17)
     val allSections: List<ProfileSection> by derivedStateOf {
         val filtered = codes.filterNot { it in blocked }
-        listOf(
-            ProfileSection.Continue,
-            ProfileSection.RecentWatch
-        ) + filtered.map { ProfileSection.Category(it) }
+        (
+                listOf(
+                    ProfileSection.Continue,
+                    ProfileSection.RecentWatch
+                ) + filtered.map { ProfileSection.Category(it) }
+                ).shuffled()
     }
+
 
     private val _refreshTrigger = MutableStateFlow(0)
     //    val refreshTrigger: StateFlow<Boolean> = _refreshTrigger
