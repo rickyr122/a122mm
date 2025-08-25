@@ -99,6 +99,8 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
     var selectedItem by remember { mutableStateOf(0) }
     val scrollState = rememberScrollState()
     val scrollOffset = scrollState.value
+    val isHomeTab = selectedItem == 0
+
     //val topBarAlpha = (scrollOffset.coerceIn(0, 300) / 300f) * 0.8f
 
     // Restore selected tab when coming back from detail page
@@ -200,15 +202,33 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
 
             val isBackgroundBlack = scrollOffset > 600
 
-            val targetTopBarColor = if (isBackgroundBlack) {
-                Color.Black.copy(alpha = 0.8f)
-            } else {
-                when {
-                    isSelectorHidden -> dominantColor.copy(alpha = 0.8f)
-                    selectorTouchesLogo -> dominantColor.copy(alpha = 1f)
-                    else -> dominantColor.copy(alpha = (scrollState.value.coerceIn(0, 300) / 300f) * 0.8f)
+//            val targetTopBarColor = if (isBackgroundBlack) {
+//                Color.Black.copy(alpha = 0.8f)
+//            } else {
+//                when {
+//                    isSelectorHidden -> dominantColor.copy(alpha = 0.8f)
+//                    selectorTouchesLogo -> dominantColor.copy(alpha = 1f)
+//                    else -> dominantColor.copy(alpha = (scrollState.value.coerceIn(0, 300) / 300f) * 0.8f)
+//                }
+//            }
+            val targetTopBarColor =
+                if (!isHomeTab) {
+                    // All non-Home tabs → fixed black at 80%
+                    Color.Black.copy(alpha = 0.8f)
+                } else {
+                    // Home only → your existing scroll/dominant behavior
+                    if (isBackgroundBlack) {
+                        Color.Black.copy(alpha = 0.8f)
+                    } else {
+                        when {
+                            isSelectorHidden    -> dominantColor.copy(alpha = 0.8f)
+                            selectorTouchesLogo -> dominantColor.copy(alpha = 1f)
+                            else -> dominantColor.copy(
+                                alpha = (scrollState.value.coerceIn(0, 300) / 300f) * 0.8f
+                            )
+                        }
+                    }
                 }
-            }
 
             val animatedTopBarColor by animateColorAsState(
                 targetValue = targetTopBarColor,
@@ -324,7 +344,10 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
                 onSelectedCategoryChange = { selectedCategory = it },
                 selectedIndex = selectedItem,
                 scrollState = scrollState,
-                onDominantColorExtracted = { color -> dominantColor = color },
+                onDominantColorExtracted = { color ->
+                    // Home only changes dominant color
+                    if (isHomeTab) dominantColor = color
+                },
                 logoBottomPx = logoBottomPx,
                 onSelectorBottomChange = { bottomPx -> selectorBottomPx = bottomPx },
                 onSelectorTouchChange = { touching ->
