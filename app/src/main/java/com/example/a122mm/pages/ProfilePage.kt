@@ -38,7 +38,8 @@ fun ProfilePage(
         //.verticalScroll(scrollState)
     ) {
         ProfileHeader(
-            modifier = Modifier.align(Alignment.CenterHorizontally)
+            modifier = Modifier.align(Alignment.CenterHorizontally),
+            onDominantColorExtracted = { onDominantColorExtracted(Color.Black) }
         )
 
         if (isLoading) {

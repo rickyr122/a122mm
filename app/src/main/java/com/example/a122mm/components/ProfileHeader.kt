@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -21,8 +22,13 @@ import com.example.a122mm.R
 
 @Composable
 fun ProfileHeader(
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onDominantColorExtracted: (Color) -> Unit
 ) {
+    // Always tell HomeScreen to switch to black
+    LaunchedEffect(Unit) {
+        onDominantColorExtracted(Color.Black)
+    }
     Column(
         modifier = modifier
             .fillMaxWidth()
