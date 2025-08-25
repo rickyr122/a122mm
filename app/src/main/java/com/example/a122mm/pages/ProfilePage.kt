@@ -6,11 +6,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.a122mm.components.ProfileHeader
@@ -30,6 +35,36 @@ fun ProfilePage(
 ) {
     val isLoading = viewModel.isLoading
     val allSections = viewModel.allSections
+
+// ✅ Force black once when ProfilePage first shows
+    LaunchedEffect(Unit) {
+        onDominantColorExtracted(Color.Black)
+    }
+
+// ✅ Re-assert black when ProfilePage resumes (e.g., device back)
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                onDominantColorExtracted(Color.Black)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+// ✅ Keep your existing collector; just also set black when refreshing
+    LaunchedEffect(navController) {
+        val handle = navController.currentBackStackEntry?.savedStateHandle ?: return@LaunchedEffect
+        handle.getStateFlow("refreshContent", false).collect { shouldRefresh ->
+            if (shouldRefresh) {
+                viewModel.triggerRefresh()               // bumps refreshTrigger
+                onDominantColorExtracted(Color.Black)    // re-assert black here too
+                handle.set("refreshContent", false)      // reset flag
+            }
+        }
+    }
+
 
     Column (
         modifier = modifier // ✅ use the passed-in modifier

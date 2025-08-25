@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.res.Configuration
 import android.util.Log
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -198,8 +199,26 @@ fun ViewMovieDetail(
     val view = LocalView.current
     val activity = LocalContext.current as Activity
 
+    var changedSomething by remember { mutableStateOf(false) }
+
+    // ✅ Handle device/system back here
+    BackHandler {
+        if (changedSomething) {
+            navController.previousBackStackEntry
+                ?.savedStateHandle
+                ?.set("refreshContent", true)
+        }
+        navController.popBackStack()
+    }
+
     DisposableEffect(Unit) {
         onDispose {
+            if (changedSomething) {
+                // tell previous screen to refresh its content
+                navController.previousBackStackEntry
+                    ?.savedStateHandle
+                    ?.set("refreshContent", true)
+            }
             onMyListChanged()
         }
     }
@@ -230,13 +249,32 @@ fun ViewMovieDetail(
     }
 
     when {
-        movie != null -> MovieDetailContent(movie!!, navController, onMyListChanged)
+        movie != null -> {
+            MovieDetailContent(
+                movie = movie!!,
+                navController = navController,
+                onMyListChanged = onMyListChanged,
+                onUserChanged = {
+                    // child tells us user changed something (my list / rating)
+                    changedSomething = true
+                },
+                onBackPressed = {
+                    // when child back arrow tapped
+                    if (changedSomething) {
+                        navController.previousBackStackEntry
+                            ?.savedStateHandle
+                            ?.set("refreshContent", true)
+                    }
+                    navController.popBackStack()
+                }
+            )
+        }
         error != null -> Text("Error: $error", color = Color.Red, modifier = Modifier.padding(16.dp))
         else -> {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .aspectRatio(16f / 9f), // Match banner space
+                    .aspectRatio(16f / 9f),
                 contentAlignment = Alignment.Center
             ) {
                 CircularProgressIndicator(
@@ -248,11 +286,14 @@ fun ViewMovieDetail(
     }
 }
 
+
 @Composable
 fun MovieDetailContent(
     movie: MovieDetail,
     navController: NavController,
-    onMyListChanged: () -> Unit
+    onMyListChanged: () -> Unit,
+    onUserChanged: () -> Unit = {},   // NEW
+    onBackPressed: () -> Unit = {}    // NEW
 ) {
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -402,10 +443,7 @@ fun MovieDetailContent(
                 modifier = Modifier
                     .size(28.dp)
                     .clickable {
-                        navController.previousBackStackEntry
-                            ?.savedStateHandle
-                            ?.set("refreshBanner", true)
-                        navController.popBackStack()
+                        onBackPressed()  // instead of directly setting savedState + popBackStack
                     }
             )
             Icon(
@@ -747,7 +785,8 @@ fun MovieDetailContent(
                                                 withContext(Dispatchers.Main) {
                                                     movieInList = newValue
                                                     updateInList(movie.m_id, newValue, context)
-                                                    onMyListChanged()
+                                                    onUserChanged()               // <— mark dirty up to parent
+                                                    onMyListChanged()             // keep your existing side-effect
                                                     Toast.makeText(
                                                         context,
                                                         if (newValue == "1") "Added to My List" else "Removed from My List",
@@ -776,8 +815,10 @@ fun MovieDetailContent(
                                     //val message = if (newRating == 0) "Rating cleared" else "You rated: Not for me"
                                     //Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                                     scope.launch(Dispatchers.IO) {
-                                        try { api.rateMovie(sId, newRating) }
-                                        catch (e: Exception) { Log.e("Rate", "Error rating -5", e) }
+                                        try {
+                                            api.rateMovie(sId, newRating)
+                                            withContext(Dispatchers.Main) { onUserChanged() }   // <—
+                                        } catch (e: Exception) { Log.e("Rate", "Error rating", e) }
                                     }
                                 }
                             }
@@ -793,10 +834,14 @@ fun MovieDetailContent(
                                     hasRated = newRating
 //                                    val message = if (newRating == 0) "Rating cleared" else "You rated: I like this"
 //                                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                                    // I Like This
                                     scope.launch(Dispatchers.IO) {
-                                        try { api.rateMovie(sId, newRating) }
-                                        catch (e: Exception) { Log.e("Rate", "Error rating 5", e) }
+                                        try {
+                                            api.rateMovie(sId, newRating)
+                                            withContext(Dispatchers.Main) { onUserChanged() }   // <—
+                                        } catch (e: Exception) { Log.e("Rate", "Error rating 5", e) }
                                     }
+
                                 }
                             }
 
@@ -811,10 +856,14 @@ fun MovieDetailContent(
                                     hasRated = newRating
 //                                    val message = if (newRating == 0) "Rating cleared" else "You rated: Love this"
 //                                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                                    // Love This
                                     scope.launch(Dispatchers.IO) {
-                                        try { api.rateMovie(sId, newRating) }
-                                        catch (e: Exception) { Log.e("Rate", "Error rating 10", e) }
+                                        try {
+                                            api.rateMovie(sId, newRating)
+                                            withContext(Dispatchers.Main) { onUserChanged() }   // <—
+                                        } catch (e: Exception) { Log.e("Rate", "Error rating 10", e) }
                                     }
+
                                 }
                             }
                         }
