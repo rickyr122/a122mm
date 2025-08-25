@@ -1,5 +1,6 @@
 package com.example.a122mm.components
 
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -20,21 +21,33 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -43,10 +56,15 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
+import com.example.a122mm.R
 import com.example.a122mm.dataclass.ApiClient
 import com.example.a122mm.helper.fixEncoding
 import kotlinx.coroutines.launch
+import retrofit2.Response
+import retrofit2.http.Field
+import retrofit2.http.FormUrlEncoded
 import retrofit2.http.GET
+import retrofit2.http.POST
 
 // API response model
 data class RecentWatchResponse(
@@ -55,12 +73,20 @@ data class RecentWatchResponse(
     val cvrUrl: String,
     val enLogo: String?,
     val gId: String,
+    val gName: String,
+    val mTitleOnly: String
 )
 
 // API Service
 interface ApiServiceRecent {
     @GET("getrecentwatch")
     suspend fun getRecentWatch(): List<RecentWatchResponse>
+
+    @FormUrlEncoded
+    @POST("addwatchexclude")
+    suspend fun addWatchExclude(          // ← rename to camelCase
+        @Field("mId") mId: String
+    ): Response<Unit>
 }
 
 // ViewModel
@@ -84,9 +110,29 @@ class RecentWatchViewModel : ViewModel() {
             }
         }
     }
+
+    fun hideFromHistory(mId: String, onDone: () -> Unit) {
+        viewModelScope.launch {
+            try { apiService.addWatchExclude(mId) } catch (_: Exception) {}
+            fetchItems()
+            onDone()
+        }
+    }
+
+    fun addWatchExclude(mId: String, onDone: () -> Unit = {}) {
+        viewModelScope.launch {
+            try {
+                apiService.addWatchExclude(mId)   // fire & forget, like addToMyList
+            } catch (_: Exception) { /* you can log here */ }
+            fetchItems()                           // refresh the row
+            onDone()
+        }
+    }
+
 }
 
 // UI
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ViewRecentWatch(
     modifier: Modifier = Modifier,
@@ -98,6 +144,17 @@ fun ViewRecentWatch(
     type: String
 ) {
     val items by viewModel.items
+    val context = LocalContext.current
+
+    LaunchedEffect(refreshTrigger) {
+        viewModel.fetchItems()
+    }
+
+    @OptIn(ExperimentalMaterial3Api::class)
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
+    var selectedItem by remember { mutableStateOf<RecentWatchResponse?>(null) }
+
 
     if (items.isEmpty()) {
         Box(
@@ -198,14 +255,12 @@ fun ViewRecentWatch(
                                 modifier = Modifier
                                     .size(24.dp)
                                     .clickable {
-                                        // TODO: handle menu
+                                        selectedItem = item
+                                        scope.launch { sheetState.show() }
                                     }
                             )
                         }
                     }
-
-
-
                 }
 
                 // 🔹 Black title bar under the image
@@ -231,8 +286,70 @@ fun ViewRecentWatch(
                         modifier = Modifier.padding(horizontal = 14.dp)
                     )
                 }
+            }
+        }
+    }
+    @OptIn(ExperimentalMaterial3Api::class)
+    if (sheetState.isVisible && selectedItem != null) {
+        ModalBottomSheet(
+            onDismissRequest = { scope.launch { sheetState.hide() } },
+            sheetState = sheetState,
+            containerColor = Color(0xFF2B2B2B),
+            contentColor = Color.White
+        ) {
+            Column(Modifier.padding(16.dp)) {
+                // Header: title + close (like your screenshot)
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = selectedItem?.gName?.fixEncoding() ?: "",
+                        color = Color.White,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Icon(
+                        imageVector = Icons.Filled.Close,
+                        contentDescription = "Close",
+                        tint = Color.White.copy(alpha = 0.8f),
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clickable { scope.launch { sheetState.hide() } }
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
 
+                // 1) Rewatch Episode XX
+                val rewatchLabel = "Rewatch " + (selectedItem?.mTitleOnly?.fixEncoding() ?: "Episode")
+                BottomSheetItem(rewatchLabel, Icons.Filled.PlayArrow) {
+                    // If you have a direct player route, call it here.
+                    // Fallback: open details (user can hit Play)
+                    navController.navigate("movie/${selectedItem?.gId}")
+                    scope.launch { sheetState.hide() }
+                }
 
+                // 2) Episodes & Info
+                BottomSheetItem("Episodes & Info", Icons.Outlined.Info) {
+                    navController.navigate("movie/${selectedItem?.gId}")
+                    scope.launch { sheetState.hide() }
+                }
+
+                // 3) Hide From Watch History
+                BottomSheetItem(
+                    "Hide From Watch History",
+                    icon = painterResource(id = R.drawable.ic_cancel)
+                ) {
+                    selectedItem?.let { sel ->
+                        viewModel.addWatchExclude(sel.mId) {
+                            Toast.makeText(context, "Hidden from watch history", Toast.LENGTH_SHORT).show()
+                            scope.launch { sheetState.hide() }
+                            onRefreshTriggered()
+                        }
+                    }
+                }
             }
         }
     }
