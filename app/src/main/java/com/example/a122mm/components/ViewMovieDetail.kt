@@ -316,7 +316,7 @@ fun MovieDetailContent(
 
     val displayDuration = if (movie.m_id.startsWith("MOV")) {
         formatDurationFromMinutes(movie.m_duration)
-    } else if (movie.m_id.startsWith("TVG")) {
+    } else if (movie.m_id.startsWith("TV")) {
         if (movie.totalSeason == 1) {
             "${movie.totalEps} Episodes"
         } else {

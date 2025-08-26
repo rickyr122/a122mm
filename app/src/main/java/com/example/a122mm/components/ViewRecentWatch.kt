@@ -74,7 +74,8 @@ data class RecentWatchResponse(
     val enLogo: String?,
     val gId: String,
     val gName: String,
-    val mTitleOnly: String
+    val mTitleOnly: String,
+    val totalSeason: Int
 )
 
 // API Service
@@ -277,8 +278,9 @@ fun ViewRecentWatch(
                         ),
                     contentAlignment = Alignment.Center   // center horizontally + vertically
                 ) {
+                    val sTitle = if (item.totalSeason == 1) item.mTitleOnly else item.mTitle
                     Text(
-                        text = item.mTitle.fixEncoding() ?: "Untitled",
+                        text = sTitle.fixEncoding() ?: "Untitled",
                         color = Color.White,
                         fontSize = 14.sp,
                         maxLines = 1,
