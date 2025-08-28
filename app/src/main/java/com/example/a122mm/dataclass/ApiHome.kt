@@ -13,6 +13,7 @@ interface ApiHomeCodesService {
 sealed class Section {
     object Continue : Section()
     data class Category(val code: Int) : Section()
+    object TopContent : Section()
 }
 
 sealed class ProfileSection {

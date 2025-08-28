@@ -15,6 +15,7 @@ import androidx.navigation.NavController
 import com.example.a122mm.components.ViewBanner
 import com.example.a122mm.components.ViewContent
 import com.example.a122mm.components.ViewContinue
+import com.example.a122mm.components.ViewTopContent
 import com.example.a122mm.dataclass.HomeViewModel
 import com.example.a122mm.dataclass.Section
 
@@ -68,6 +69,13 @@ fun HomePage(
                         refreshTrigger = refreshTrigger.value,
                         onRefreshTriggered = { viewModel.triggerRefresh() },
                         currentTabIndex = 0,
+                        type = type
+                    )
+                    is Section.TopContent -> ViewTopContent(   // ✅ new call
+                        modifier,
+                        navController,
+                        currentTabIndex = 0,
+                        refreshTrigger = refreshTrigger.value,
                         type = type
                     )
                 }
