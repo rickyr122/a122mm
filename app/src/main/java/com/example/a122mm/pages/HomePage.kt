@@ -5,13 +5,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.example.a122mm.components.PosterViewModel2
 import com.example.a122mm.components.ViewBanner
 import com.example.a122mm.components.ViewContent
 import com.example.a122mm.components.ViewContinue
@@ -30,10 +33,13 @@ fun HomePage(
     val isLoading = viewModel.isLoading
     val allSections = viewModel.allSections
 
-    Column (
-        modifier = modifier // ✅ use the passed-in modifier
+    // ViewModel that holds the Continue Watching list
+    val continueVM: PosterViewModel2 = viewModel()
+    val posters by continueVM.posters2
+
+    Column(
+        modifier = modifier
             .fillMaxSize()
-            //.verticalScroll(scrollState)
     ) {
         ViewBanner(
             modifier,
@@ -52,16 +58,29 @@ fun HomePage(
             )
         } else {
             val refreshTrigger = viewModel.refreshTrigger.collectAsState()
+
+            // Fetch/refresh Continue Watching whenever type or refreshTrigger changes
+            LaunchedEffect(type, refreshTrigger.value) {
+                continueVM.fetchPosters(type)
+            }
+
             allSections.forEach { section ->
                 when (section) {
-                    is Section.Continue -> ViewContinue(
-                        modifier,
-                        navController,
-                        refreshTrigger = refreshTrigger.value,
-                        onRefreshTriggered = { viewModel.triggerRefresh() },
-                        currentTabIndex = 0,
-                        type = type
-                    )
+                    is Section.Continue -> {
+                        // 🔑 Only show if there’s data
+                        if (posters.isNotEmpty()) {
+                            ViewContinue(
+                                modifier = modifier,
+                                navController = navController,
+                                refreshTrigger = refreshTrigger.value,
+                                onRefreshTriggered = { viewModel.triggerRefresh() },
+                                currentTabIndex = 0,
+                                viewModel = continueVM,   // use the same VM we checked
+                                type = type
+                            )
+                        }
+                    }
+
                     is Section.Category -> ViewContent(
                         modifier,
                         section.code,
@@ -71,7 +90,8 @@ fun HomePage(
                         currentTabIndex = 0,
                         type = type
                     )
-                    is Section.TopContent -> ViewTopContent(   // ✅ new call
+
+                    is Section.TopContent -> ViewTopContent(
                         modifier,
                         navController,
                         currentTabIndex = 0,

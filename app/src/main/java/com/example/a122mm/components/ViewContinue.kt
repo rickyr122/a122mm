@@ -77,6 +77,7 @@ import retrofit2.http.Field
 import retrofit2.http.FormUrlEncoded
 import retrofit2.http.GET
 import retrofit2.http.POST
+import retrofit2.http.Query
 
 data class ContinueWatchingResponseContent(
     val mId: String,
@@ -90,11 +91,15 @@ data class ContinueWatchingResponseContent(
 
 interface ApiServiceContent2 {
     @GET("getcontinuewatching")
-    suspend fun getContinueWatching(): List<ContinueWatchingResponseContent>
+    suspend fun getContinueWatching(
+        @Query("type") type: String
+    ): List<ContinueWatchingResponseContent>
 
     @FormUrlEncoded
     @POST("removecontinue")
-    suspend fun removecontinue(@Field("mId") mId: String): RemoveResponse
+    suspend fun removecontinue(
+        @Field("mId") mId: String
+    ): RemoveResponse
 
     @FormUrlEncoded
     @POST("addratemovie")
@@ -123,10 +128,10 @@ class PosterViewModel2 : ViewModel() {
     val posters2: State<List<ContinueWatchingResponseContent>> = _posters2
 
     init {
-        fetchPosters()
+        fetchPosters("HOM")
     }
-
-    fun removeItemFromContinue(mId: String, onComplete: () -> Unit) {
+    //rating: Int,
+    fun removeItemFromContinue(mId: String,  type: String, onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             try {
                 val result = apiService.removecontinue(mId)
@@ -136,7 +141,7 @@ class PosterViewModel2 : ViewModel() {
 //                    onComplete()
 
                     // ✅ Reload from server instead of modifying list manually
-                    fetchPosters() // your function to refresh the list
+                    fetchPosters(type) // your function to refresh the list
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -146,11 +151,11 @@ class PosterViewModel2 : ViewModel() {
         }
     }
 
-    fun fetchPosters() {
+    fun fetchPosters(type: String) {
         viewModelScope.launch {
             try {
 //                posters2 = apiService.getContinueWatching()
-                _posters2.value = apiService.getContinueWatching() // 👈 HERE
+                _posters2.value = apiService.getContinueWatching(type) // 👈 HERE
             } catch (e: Exception) {
 //                posters2 = emptyList()
                 _posters2.value = emptyList()
@@ -159,13 +164,13 @@ class PosterViewModel2 : ViewModel() {
         }
     }
 
-    fun rateMovie(mId: String, rating: Int, onComplete: () -> Unit = {}) {
+    fun rateMovie(mId: String, rating: Int, type: String, onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             try {
                 val response = apiService.rateMovie(mId, rating)
                 if (response.isSuccessful) {
                     // Refresh posters so the updated hasRated value comes in
-                    fetchPosters()
+                    fetchPosters(type)
                 } else {
                     Log.e("RATE", "Failed: ${response.code()} ${response.message()}")
                 }
@@ -191,8 +196,8 @@ fun ViewContinue(
 ) {
     val posters by viewModel.posters2
 
-    LaunchedEffect(refreshTrigger) {
-        viewModel.fetchPosters() // this will re-fetch the list every time refreshTrigger toggles
+    LaunchedEffect(refreshTrigger, type) {
+        viewModel.fetchPosters(type) // this will re-fetch the list every time refreshTrigger toggles
     }
 
 
@@ -469,7 +474,7 @@ fun ViewContinue(
                             val newRating = if (isSelected) 0 else option.value
                             localHasRated = newRating
 
-                            viewModel.rateMovie(poster.mId, newRating) {
+                            viewModel.rateMovie(poster.mId, newRating, type) {
                                 coroutineScope.launch {
                                     delay(1000)
                                     sheetState.hide()
@@ -485,7 +490,7 @@ fun ViewContinue(
                     icon = painterResource(id = R.drawable.ic_cancel)
                 ) {
                     selectedPoster?.let { poster ->
-                        viewModel.removeItemFromContinue(poster.mId) {
+                        viewModel.removeItemFromContinue(poster.mId, type) {
                             coroutineScope.launch {
                                 sheetState.hide()
                                 onRefreshTriggered()
