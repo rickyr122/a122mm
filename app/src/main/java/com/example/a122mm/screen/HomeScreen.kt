@@ -86,7 +86,7 @@ import androidx.navigation.NavController
 import com.example.a122mm.R
 import com.example.a122mm.dataclass.BottomNavItem
 import com.example.a122mm.helper.setScreenOrientation
-import com.example.a122mm.pages.FavoritesPage
+import com.example.a122mm.pages.HighlightsPage
 import com.example.a122mm.pages.HomePage
 import com.example.a122mm.pages.MoviePage
 import com.example.a122mm.pages.ProfilePage
@@ -110,6 +110,10 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
             selectedItem = tabIndex
         }
     }
+
+    // at the top of HomeScreen() composable body
+    var highlightsSelected by rememberSaveable { mutableStateOf(0) }
+    var highlightsCode by rememberSaveable { mutableStateOf("RECENT") }
 
 //    val navItems = listOf(
 //        BottomNavItem("Home", Icons.Filled.Home, Icons.Outlined.Home),
@@ -187,6 +191,7 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
 
     // NEW: track if selector is touching logo bottom
     var selectorTouchesLogo by remember { mutableStateOf(false) }
+    var pillsHeightPx by remember { mutableStateOf(0) }
 
     Scaffold(
         containerColor = Color.Transparent,
@@ -194,11 +199,11 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
             @OptIn(ExperimentalAnimationApi::class)
             val isSelectorHidden = selectorBottomPx <= logoBottomPx
 
-            val topBarAlpha = when {
-                isSelectorHidden -> 0.5f  // Selector hidden: topBar at 80% opacity
-                selectorTouchesLogo -> 0.8f  // Selector visible but touching logo: full opacity
-                else -> (scrollState.value.coerceIn(0, 300) / 300f) * 0.8f  // Normal scroll-based alpha
-            }
+//            val topBarAlpha = when {
+//                isSelectorHidden -> 0.5f  // Selector hidden: topBar at 80% opacity
+//                selectorTouchesLogo -> 0.8f  // Selector visible but touching logo: full opacity
+//                else -> (scrollState.value.coerceIn(0, 300) / 300f) * 0.8f  // Normal scroll-based alpha
+//            }
 
             val isBackgroundBlack = scrollOffset > 600
 
@@ -212,11 +217,14 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
 //                }
 //            }
             val targetTopBarColor =
-                if (!isHomeTab) {
-                    // All non-Home tabs → fixed black at 80%
+                if (selectedItem == 2) {
+                    // ✅ Highlights tab → force solid black
+                    Color.Black
+                } else if (!isHomeTab) {
+                    // Other non-Home tabs → semi-transparent black
                     Color.Black.copy(alpha = 0.8f)
                 } else {
-                    // Home only → your existing scroll/dominant behavior
+                    // Home tab → existing scroll/dominant logic
                     if (isBackgroundBlack) {
                         Color.Black.copy(alpha = 0.8f)
                     } else {
@@ -265,6 +273,30 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
                                         logoBottomPx = (position.y + height).toInt()
                                     }
                     )
+                }
+                val coroutineScope = rememberCoroutineScope()
+                // ✅ FIXED HIGHLIGHTS PILLS under the logo (visible only on Highlights tab)
+                if (selectedItem == 2) {
+                    com.example.a122mm.components.DiscoveryFilters(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 2.dp)  // breathing room inside the bar
+                            .onGloballyPositioned { coords ->
+                            pillsHeightPx = coords.size.height   // ✅ capture height in px
+                        },
+                        selectedIndex = highlightsSelected,
+                        onSelected = { idx, code ->
+                            highlightsSelected = idx
+                            highlightsCode = code
+
+                            // 🔁 reset the CONTENT scroll to top
+                            coroutineScope.launch {
+                                scrollState.animateScrollTo(0)   // or scrollTo(0) for instant jump
+                            }
+                        }
+                    )
+                    // Optional tiny gap before the page content starts:
+                    Spacer(Modifier.height(6.dp))
                 }
             }
         },
@@ -336,9 +368,9 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
                     .padding(
                         start = innerPadding.calculateStartPadding(LocalLayoutDirection.current),
                         end = innerPadding.calculateEndPadding(LocalLayoutDirection.current),
-                        bottom = innerPadding.calculateBottomPadding()
+                        bottom = innerPadding.calculateBottomPadding(),
+                        top = if (selectedItem == 2) with(LocalDensity.current) { pillsHeightPx.toDp() } else 0.dp
                     ),
-                //.padding(top = contentTopPadding), // <-- add this,
                 navController = navController,
                 selectedCategory = selectedCategory,
                 onSelectedCategoryChange = { selectedCategory = it },
@@ -352,7 +384,8 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
                 onSelectorBottomChange = { bottomPx -> selectorBottomPx = bottomPx },
                 onSelectorTouchChange = { touching ->
                     selectorTouchesLogo = touching
-                }
+                },
+                highlightsCode = highlightsCode
             )
         }
     }
@@ -369,59 +402,53 @@ fun ContentScreen(
     scrollState: ScrollState,
     onDominantColorExtracted: (Color) -> Unit,
     logoBottomPx: Int,
-    onSelectorTouchChange: (Boolean) -> Unit,  // NEW
-    onSelectorBottomChange: (Int) -> Unit
+    onSelectorTouchChange: (Boolean) -> Unit,
+    onSelectorBottomChange: (Int) -> Unit,
+    highlightsCode: String
 ) {
     val configuration = LocalConfiguration.current
     val layoutDirection = LocalLayoutDirection.current
     val navBars = WindowInsets.navigationBars.asPaddingValues()
+    val systemBars = WindowInsets.systemBars.asPaddingValues()
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     val coroutineScope = rememberCoroutineScope()
 
-    // Remember last tab & filter to detect what changed
+    // Track changes for animations
     var lastIndex by remember { mutableStateOf(selectedIndex) }
     var lastCategory by remember { mutableStateOf(selectedCategory) }
-
-    // Decide if change is a tab switch or filter change
     val isFilterChange = selectedIndex == 0 && selectedCategory != lastCategory
     val isTabChange = selectedIndex != lastIndex
 
-    // Update trackers
     LaunchedEffect(selectedIndex, selectedCategory) {
         lastIndex = selectedIndex
         lastCategory = selectedCategory
     }
 
-    val systemBars = WindowInsets.systemBars.asPaddingValues()
-    val isFilterVisible = selectedIndex == 0
-    val filterHeight = if (isFilterVisible) 6.dp + 2.dp else 0.dp
-    val contentTopPadding = filterHeight //+ 8.dp //systemBars.calculateTopPadding() + 56.dp + filterHeight
-
-    //var logoBottomPx by remember { mutableStateOf(0) }
-    val context = LocalContext.current
-    //val coroutineScope = rememberCoroutineScope()
-
+    // Home selector fade logic vs logo
     var selectorTopPx by remember { mutableStateOf(0) }
     var selectorBottomPx by remember { mutableStateOf(0) }
 
-    var hasToastShown by remember { mutableStateOf(false) }
+//    // Highlights pills state
+//    var highlightsSelected by remember { mutableStateOf(0) }
+//    var highlightsCode by remember { mutableStateOf("RECENT") }
 
+    // Parent owns the vertical scroll
     Column(
         modifier = modifier
             .verticalScroll(scrollState)
             .fillMaxSize()
     ) {
+        // Space for logo/topBar
         Spacer(
-            modifier = Modifier
-                .height(systemBars.calculateTopPadding() + 64.dp)
+            modifier = Modifier.height(systemBars.calculateTopPadding() + 64.dp)
         )
-        // --- Selector moved here, scrolls with content ---
+
+        // --- HOME selector (scrolls with parent) ---
         if (selectedIndex == 0) {
             AnimatedContent(
                 targetState = selectedCategory,
                 label = "CategoryFilterAnimation"
             ) { category ->
-
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier
@@ -433,16 +460,8 @@ fun ContentScreen(
                             selectorTopPx = position.y.toInt()
                             selectorBottomPx = (position.y + height).toInt()
 
-                            // Notify parent if selector top touches or goes above logo bottom
                             onSelectorBottomChange(bottomPx)
                             onSelectorTouchChange(selectorTopPx <= logoBottomPx)
-
-//                            if (selectorTopPx <= logoBottomPx && !hasToastShown) {
-//                                hasToastShown = true
-//                                Toast.makeText(context, "Selector touches logo bottom!", Toast.LENGTH_SHORT).show()
-//                            } else if (selectorTopPx > logoBottomPx) {
-//                                hasToastShown = false
-//                            }
                         }
                         .graphicsLayer {
                             alpha = if (selectorBottomPx <= logoBottomPx) 0f else 1f
@@ -455,10 +474,7 @@ fun ContentScreen(
                                     .border(1.dp, Color.White, CircleShape)
                                     .clip(CircleShape)
                                     .background(Color.Transparent)
-                                    .clickable {
-                                        onSelectedCategoryChange(cat)
-                                        coroutineScope.launch { scrollState.animateScrollTo(0) }
-                                    }
+                                    .clickable { onSelectedCategoryChange(cat) }
                                     .padding(horizontal = 10.dp, vertical = 6.dp),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -481,10 +497,7 @@ fun ContentScreen(
                             modifier = Modifier
                                 .border(1.dp, Color.White, CircleShape)
                                 .clip(CircleShape)
-                                .clickable {
-                                    onSelectedCategoryChange(null)
-                                    coroutineScope.launch { scrollState.animateScrollTo(0) }
-                                }
+                                .clickable { onSelectedCategoryChange(null) }
                                 .padding(horizontal = 10.dp, vertical = 6.dp),
                             contentAlignment = Alignment.Center
                         ) {
@@ -493,6 +506,8 @@ fun ContentScreen(
                     }
                 }
             }
+            // ✅ add extra spacing before content starts
+            Spacer(modifier = Modifier.height(12.dp))
         }
 
         // --- Page content below ---
@@ -514,9 +529,7 @@ fun ContentScreen(
             },
             label = "PageChangeAnimation"
         ) { (index, category) ->
-            val pageModifier = Modifier
-                .padding(top = contentTopPadding)
-                .fillMaxSize()
+            val pageModifier = Modifier.fillMaxSize()
 
             when (index) {
                 0 -> when (category) {
@@ -525,9 +538,13 @@ fun ContentScreen(
                     else -> HomePage(pageModifier, navController, onDominantColorExtracted, type = "HOM")
                 }
                 1 -> SearchPage(pageModifier)
-                2 -> FavoritesPage(pageModifier)
-                3 -> ProfilePage(pageModifier,navController, onDominantColorExtracted, type = "PRO")
+                2 -> HighlightsPage(
+                    modifier = pageModifier,
+                    activeCode = highlightsCode // ✅ pass selected pill filter
+                )
+                3 -> ProfilePage(pageModifier, navController, onDominantColorExtracted, type = "PRO")
             }
         }
     }
 }
+
