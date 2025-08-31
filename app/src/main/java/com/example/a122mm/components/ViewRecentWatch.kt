@@ -112,13 +112,13 @@ class RecentWatchViewModel : ViewModel() {
         }
     }
 
-    fun hideFromHistory(mId: String, onDone: () -> Unit) {
-        viewModelScope.launch {
-            try { apiService.addWatchExclude(mId) } catch (_: Exception) {}
-            fetchItems()
-            onDone()
-        }
-    }
+//    fun hideFromHistory(mId: String, onDone: () -> Unit) {
+//        viewModelScope.launch {
+//            try { apiService.addWatchExclude(mId) } catch (_: Exception) {}
+//            fetchItems()
+//            onDone()
+//        }
+//    }
 
     fun addWatchExclude(mId: String, onDone: () -> Unit = {}) {
         viewModelScope.launch {

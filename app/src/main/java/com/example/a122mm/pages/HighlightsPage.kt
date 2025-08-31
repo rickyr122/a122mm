@@ -1,6 +1,9 @@
 package com.example.a122mm.pages
 
 import android.content.res.Configuration
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,127 +13,320 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
-import coil.compose.AsyncImagePainter
+import com.example.a122mm.dataclass.ApiClient
+import com.example.a122mm.helper.fixEncoding
+import kotlinx.coroutines.launch
+import retrofit2.http.GET
+import retrofit2.http.Query
 
-private const val TMDB_IMG = "https://image.tmdb.org/t/p/w500"
-
-data class HighlightItem(
-    val title: String,
-    val posterPath: String
+// ===== API DTO from backend =====
+// Keep only what you need to render. Add fields later if needed.
+data class HighlightDto(
+    val mId: String,
+    val mTitle: String,
+    val cvrUrl: String,
+    val enLogo: String? = null,
+    val mDescription: String,
+    val mContent: String? = null
 )
 
+// ===== Retrofit API (single endpoint with filter) =====
+interface HighlightsApi {
+    @GET("gethighlights")
+    suspend fun getHighlights(
+        @Query("filter") filter: String,   // "RECENT" | "SHOULD" | "TOP10_MOV" | "TOP10_TVG"
+    ): List<HighlightDto>
+}
+
+// ===== UI model =====
+data class HighlightItem(
+    val mId: String,
+    val mTitle: String,
+    val cvrUrl: String,
+    val enLogo: String? = null,
+    val mDescription: String? = null,
+    val mContent: String
+)
+
+// ===== ViewModel (same pattern as ViewRecentWatch) =====
+sealed interface HighlightsUi {
+    data object Loading : HighlightsUi
+    data class Data(val items: List<HighlightItem>) : HighlightsUi
+    data class Error(val message: String) : HighlightsUi
+}
+
+class HighlightsViewModel : ViewModel() {
+    // Use the correct API for highlights (NOT ApiServiceRecent)
+    private val api = ApiClient.create(HighlightsApi::class.java)
+
+    private val _ui = mutableStateOf<HighlightsUi>(HighlightsUi.Loading)
+    val ui: State<HighlightsUi> = _ui
+
+    fun load(filter: String) {
+        viewModelScope.launch {
+            _ui.value = HighlightsUi.Loading
+            runCatching { api.getHighlights(filter = filter) }
+                .onSuccess { list ->
+                    _ui.value = HighlightsUi.Data(
+                        list.map { dto ->
+                            HighlightItem(
+                                mId = dto.mId,
+                                mTitle = dto.mTitle,
+                                cvrUrl = dto.cvrUrl,
+                                enLogo = dto.enLogo,
+                                mDescription = dto.mDescription,
+                                mContent = dto.mContent!!
+                            )
+                        }
+                    )
+                }
+                .onFailure { e ->
+                    _ui.value = HighlightsUi.Error(e.message ?: "Failed to load")
+                }
+        }
+    }
+}
+
+// ===== Composable =====
 @Composable
 fun HighlightsPage(
     modifier: Modifier = Modifier,
-    activeCode: String = "RECENT"
+    activeCode: String = "RECENT",
+    viewModel: HighlightsViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
-    val items = when (activeCode) {
-        "RECENT" -> listOf(
-            HighlightItem("Dune: Part Two", "/8bcoRX3hQRHufLPSDREdvr3YMXx.jpg"),
-            HighlightItem("Furiosa: A Mad Max Saga", "/iADOJ8Zymht2JPMoy3R7xceZprc.jpg"),
-            HighlightItem("Inside Out 2", "/gMB8vgHu2B6SxjZM3V5hFv1cHZo.jpg"),
-        )
-
-        "SHOULD" -> listOf(
-            HighlightItem("The Shawshank Redemption", "/q6y0Go1tsGEsmtFryDOJo3dEmqu.jpg"),
-            HighlightItem("Interstellar", "/gEU2QniE6E77NI6lCU6MxlNBvIx.jpg"),
-            HighlightItem("Parasite", "/7IiTTgloJzvGI1TAYymCfbfl3vT.jpg"),
-        )
-
-        "TOP10_MOV" -> listOf(
-            HighlightItem("The Dark Knight", "/qJ2tW6WMUDux911r6m7haRef0WH.jpg"),
-            HighlightItem("Inception", "/kqjL17yufvn9OVLyXYpvtyrFfak.jpg"),
-            HighlightItem("Avengers: Endgame", "/or06FN3Dka5tukK1e9sl16pB3iy.jpg"),
-        )
-
-        "TOP10_TVG" -> listOf(
-            HighlightItem("Breaking Bad", "/ggFHVNu6YYI5L9pCfOacjizRGt.jpg"),
-            HighlightItem("Game of Thrones", "/u3bZgnGQ9T01sWNhyveQz0wH0Hl.jpg"),
-            HighlightItem("The Last of Us", "/uKvVjHNqB5VmOrdxqAt2F7J78ED.jpg"),
-        )
-
-        else -> emptyList()
+    // Trigger load when pills change
+    LaunchedEffect(activeCode) {
+        viewModel.load(activeCode)
     }
+
+    val ui by viewModel.ui
 
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     val isTablet = configuration.screenWidthDp >= 600
 
-    val contentModifier = if (isTablet && isLandscape) {
-        Modifier
-            .fillMaxWidth(0.7f)
-        //.align(Alignment.TopCenter)
+    val widthMod = if (isTablet && isLandscape) {
+        Modifier.fillMaxWidth(0.7f)
     } else {
-        Modifier
-            .fillMaxWidth()
-        //.align(Alignment.TopCenter)
+        Modifier.fillMaxWidth()
     }
 
+    // Keep non-scrollable; HomeScreen owns scroll
     Box(modifier = modifier.fillMaxWidth()) {
-        Column(
-            modifier = contentModifier
-                .align(Alignment.TopCenter)
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            items.forEach { item ->
-                HighlightCard(item)
+        when (val s = ui) {
+            is HighlightsUi.Loading -> {
+                CircularProgressIndicator(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 24.dp),
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f),
+                    strokeWidth = 4.dp
+                )
             }
-            Spacer(Modifier.height(12.dp))
+
+            is HighlightsUi.Error -> {
+                Text(
+                    text = s.message,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 24.dp)
+                )
+            }
+
+            is HighlightsUi.Data -> {
+                Column(
+                    modifier = widthMod
+                        .align(Alignment.TopCenter) // horizontally center
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    s.items.forEach { item ->
+                        HighlightCard(item)
+                    }
+                    Spacer(Modifier.height(12.dp))
+                }
+            }
         }
     }
 }
 
 @Composable
 private fun HighlightCard(item: HighlightItem) {
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val isTablet = configuration.screenWidthDp >= 600
+
     Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(16.dp)), // thin white border
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.12f)
         )
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            AsyncImage(
-                model = "$TMDB_IMG${item.posterPath}",
-                contentDescription = item.title,
+
+            // --- Top visual: main image with overlays ---
+            Box(
                 modifier = Modifier
-                    .aspectRatio(16f / 9f)
                     .fillMaxWidth()
-                    .height(220.dp)
-                    .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)),
-                contentScale = ContentScale.Crop,
-                onState = { state ->
-                    if (state is AsyncImagePainter.State.Error) {
-                        // TODO: optional placeholder UI
-                    }
+                    .aspectRatio(16f / 9f)
+                    .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+            ) {
+                // Main image
+                AsyncImage(
+                    model = item.cvrUrl,
+                    contentDescription = item.mTitle,
+                    modifier = Modifier.matchParentSize(),
+                    contentScale = ContentScale.Crop
+                )
+                // Top-right: mContent badge
+               Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp)
+                        .background(Color.Black, RoundedCornerShape(8.dp))
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = item.mContent,
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelMedium
+                    )
                 }
-            )
+
+                // Center overlay: play button (black circle + thin white border)
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .size(64.dp)
+                        .clip(CircleShape)
+                        .border(1.dp, Color.White.copy(alpha = 0.9f), CircleShape)
+                        .background(Color.Black.copy(alpha = 0.55f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.PlayArrow,
+                        contentDescription = "Play",
+                        tint = Color.White,
+                        modifier = Modifier.size(36.dp)
+                    )
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            // --- Under main image: logo (left, proportional) ---
+            val logoMaxWidth = if (isTablet) 0.4f else 0.5f
+            if (!item.enLogo.isNullOrBlank()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, top = 12.dp, end = 16.dp)
+                ) {
+                    AsyncImage(
+                        model = item.enLogo,
+                        contentDescription = "${item.mTitle} logo",
+                        contentScale = ContentScale.Fit, // keeps natural proportions
+                        modifier = Modifier
+                            .fillMaxWidth(logoMaxWidth) // occupy 50% of card width
+                            //.align(Alignment.Start) // left aligned
+                    )
+                }
+            } else {
+                // fallback to title if no logo
+                Text(
+                    text = item.mTitle,
+                    modifier = Modifier.padding(start = 16.dp, top = 12.dp, end = 16.dp),
+                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.ExtraBold)
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+
+            // --- Description ---
+            if (!item.mDescription.isNullOrBlank()) {
+                Text(
+                    text = item.mDescription.fixEncoding(),
+                    modifier = Modifier
+                        .padding(horizontal = 16.dp)
+                        .padding(top = 8.dp),
+                    color = Color.White.copy(alpha = 0.9f),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+
+            // --- Bottom buttons: Play + My List ---
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(12.dp),
+                    .padding(horizontal = 16.dp)
+                    .padding(top = 14.dp, bottom = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = item.title,
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.SemiBold
+                Button(
+                    onClick = { /* TODO: play */ },
+                    modifier = Modifier
+                        .height(44.dp)
+                        .weight(1f),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.White,
+                        contentColor = Color.Black
                     )
-                )
+                ) {
+                    Icon(Icons.Filled.PlayArrow, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Play")
+                }
+
+                OutlinedButton(
+                    onClick = { /* TODO: add/remove list */ },
+                    modifier = Modifier
+                        .height(44.dp)
+                        .weight(1f),
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.8f)),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = Color.White
+                    )
+                ) {
+                    Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("My List")
+                }
             }
         }
     }
