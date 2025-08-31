@@ -1,15 +1,16 @@
 package com.example.a122mm.pages
 
 import android.content.res.Configuration
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -27,7 +28,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -171,12 +171,12 @@ fun HighlightsPage(
                     modifier = widthMod
                         .align(Alignment.TopCenter) // horizontally center
                         .padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     s.items.forEach { item ->
                         HighlightCard(item)
                     }
-                    Spacer(Modifier.height(12.dp))
+                    //Spacer(Modifier.height(12.dp))
                 }
             }
         }
@@ -192,8 +192,8 @@ private fun HighlightCard(item: HighlightItem) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(16.dp)), // thin white border
-        shape = RoundedCornerShape(16.dp),
+            .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(16.dp)), // thin white border
+        shape = RoundedCornerShape(3.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.12f)
         )
@@ -293,41 +293,46 @@ private fun HighlightCard(item: HighlightItem) {
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp)
                     .padding(top = 14.dp, bottom = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // Play
                 Button(
-                    onClick = { /* TODO: play */ },
+                    onClick = { /* TODO */ },
                     modifier = Modifier
-                        .height(44.dp)
-                        .weight(1f),
+                        .height(36.dp)
+                        .defaultMinSize(minWidth = 0.dp, minHeight = 0.dp),
                     shape = RoundedCornerShape(10.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color.White,
                         contentColor = Color.Black
-                    )
+                    ),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
                 ) {
-                    Icon(Icons.Filled.PlayArrow, contentDescription = null, modifier = Modifier.size(20.dp))
-                    Spacer(Modifier.width(6.dp))
+                    Icon(Icons.Filled.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
                     Text("Play")
                 }
 
-                OutlinedButton(
-                    onClick = { /* TODO: add/remove list */ },
+                // My List (solid dark, no outline)
+                Button(
+                    onClick = { /* TODO */ },
                     modifier = Modifier
-                        .height(44.dp)
-                        .weight(1f),
+                        .height(36.dp)
+                        .defaultMinSize(minWidth = 0.dp, minHeight = 0.dp),
                     shape = RoundedCornerShape(10.dp),
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.8f)),
-                    colors = ButtonDefaults.outlinedButtonColors(
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF333333),
                         contentColor = Color.White
-                    )
+                    ),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
                 ) {
-                    Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(20.dp))
-                    Spacer(Modifier.width(6.dp))
+                    Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
                     Text("My List")
                 }
             }
+
         }
     }
 }
