@@ -52,7 +52,7 @@ fun DiscoveryFilters(
     val items = remember {
         listOf(
             DiscoveryFilterDef("RECENT",    "Recently added",         "🆕"),
-            DiscoveryFilterDef("SHOULD",    "You Should Watch This",  "⭐"),
+            DiscoveryFilterDef("SHOULD", "You'll Never Watch This", "🙈"),
             DiscoveryFilterDef("TOP10_MOV", "Top 10 Movies",          "🎬"),
             DiscoveryFilterDef("TOP10_TVG", "Top 10 Series",          "📺"),
         )
@@ -110,7 +110,7 @@ fun DiscoveryFilters(
                         modifier = Modifier
                             .size(24.dp) // smaller circle to match tighter pill
                             .clip(CircleShape)
-                            .background(if (isSelected) Color.White else Color(0xFF2A2A2A)),
+                            .background(if (isSelected) Color.White else Color.Black),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
