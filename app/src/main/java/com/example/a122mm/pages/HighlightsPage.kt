@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -34,6 +35,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -48,7 +50,12 @@ import coil.compose.AsyncImage
 import com.example.a122mm.dataclass.ApiClient
 import com.example.a122mm.helper.fixEncoding
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import retrofit2.Response
+import retrofit2.http.Field
+import retrofit2.http.FormUrlEncoded
 import retrofit2.http.GET
+import retrofit2.http.POST
 import retrofit2.http.Query
 
 // ===== API DTO from backend =====
@@ -59,7 +66,8 @@ data class HighlightDto(
     val cvrUrl: String,
     val enLogo: String? = null,
     val mDescription: String,
-    val mContent: String? = null
+    val mContent: String? = null,
+    val inList: String
 )
 
 // ===== Retrofit API (single endpoint with filter) =====
@@ -68,6 +76,14 @@ interface HighlightsApi {
     suspend fun getHighlights(
         @Query("filter") filter: String,   // "RECENT" | "SHOULD" | "TOP10_MOV" | "TOP10_TVG"
     ): List<HighlightDto>
+
+    @FormUrlEncoded
+    @POST("addmylist")
+    suspend fun addToMyList(@Field("mId") mId: String): Response<Unit>
+
+    @FormUrlEncoded
+    @POST("removemylist")
+    suspend fun removeFromMyList(@Field("mId") mId: String): Response<Unit>
 }
 
 // ===== UI model =====
@@ -77,7 +93,8 @@ data class HighlightItem(
     val cvrUrl: String,
     val enLogo: String? = null,
     val mDescription: String? = null,
-    val mContent: String
+    val mContent: String,
+    val inList: String
 )
 
 // ===== ViewModel (same pattern as ViewRecentWatch) =====
@@ -107,7 +124,8 @@ class HighlightsViewModel : ViewModel() {
                                 cvrUrl = dto.cvrUrl,
                                 enLogo = dto.enLogo,
                                 mDescription = dto.mDescription,
-                                mContent = dto.mContent!!
+                                mContent = dto.mContent!!,
+                                inList = dto.inList
                             )
                         }
                     )
@@ -124,6 +142,7 @@ class HighlightsViewModel : ViewModel() {
 fun HighlightsPage(
     modifier: Modifier = Modifier,
     activeCode: String = "RECENT",
+    onMyListChanged: () -> Unit = {},
     viewModel: HighlightsViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
     // Trigger load when pills change
@@ -184,10 +203,18 @@ fun HighlightsPage(
 }
 
 @Composable
-private fun HighlightCard(item: HighlightItem) {
+private fun HighlightCard(item: HighlightItem, onMyListChanged: () -> Unit = {}) {
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     val isTablet = configuration.screenWidthDp >= 600
+
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val myListApi = com.example.a122mm.dataclass.ApiClient.create(HighlightsApi::class.java)
+
+    // Local copy so the button icon/label can update immediately on success
+    var localInList by androidx.compose.runtime.remember { mutableStateOf(item.inList) }
+    var isLoading by androidx.compose.runtime.remember { mutableStateOf(false) }
 
     Card(
         modifier = Modifier
@@ -215,7 +242,7 @@ private fun HighlightCard(item: HighlightItem) {
                     contentScale = ContentScale.Crop
                 )
                 // Top-right: mContent badge
-               Box(
+                Box(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(8.dp)
@@ -262,7 +289,7 @@ private fun HighlightCard(item: HighlightItem) {
                         contentScale = ContentScale.Fit, // keeps natural proportions
                         modifier = Modifier
                             .fillMaxWidth(logoMaxWidth) // occupy 50% of card width
-                            //.align(Alignment.Start) // left aligned
+                        //.align(Alignment.Start) // left aligned
                     )
                 }
             } else {
@@ -315,8 +342,37 @@ private fun HighlightCard(item: HighlightItem) {
                 }
 
                 // My List (solid dark, no outline)
+                val icon = if (localInList == "1") Icons.Filled.Check else Icons.Filled.Add
                 Button(
-                    onClick = { /* TODO */ },
+                    onClick = {
+                        if (isLoading) return@Button
+                        isLoading = true
+                        val currentlyIn = localInList == "1"
+                        val nextValue = if (currentlyIn) "0" else "1"
+
+                        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                            val resp = try {
+                                if (currentlyIn) myListApi.removeFromMyList(item.mId)
+                                else myListApi.addToMyList(item.mId)
+                            } catch (t: Throwable) {
+                                null
+                            }
+
+                            if (resp?.isSuccessful == true) {
+                                // Update banner caches that share this mId
+                                com.example.a122mm.helper.updateInList(item.mId, nextValue, context) // ✅ cache fix
+                                // Update local UI and notify parent
+                                withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                    localInList = nextValue
+                                    onMyListChanged() // notify others to refresh (same pattern as ViewBanner)
+                                }
+                            }
+                            withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                isLoading = false
+                            }
+                        }
+                    },
+                    enabled = !isLoading,
                     modifier = Modifier
                         .height(36.dp)
                         .defaultMinSize(minWidth = 0.dp, minHeight = 0.dp),
@@ -327,9 +383,17 @@ private fun HighlightCard(item: HighlightItem) {
                     ),
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
                 ) {
-                    Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("My List")
+                    if (isLoading) {
+                        CircularProgressIndicator(
+                            color = Color.White,
+                            strokeWidth = 2.dp,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    } else {
+                        Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("My List")
+                    }
                 }
             }
 

@@ -1,7 +1,6 @@
 package com.example.a122mm.components
 
 import android.app.Activity
-import android.content.Context
 import android.content.res.Configuration
 import android.util.Log
 import android.widget.Toast
@@ -85,6 +84,7 @@ import com.example.a122mm.R
 import com.example.a122mm.dataclass.NetworkModule
 import com.example.a122mm.dataclass.NetworkModule.mApiService
 import com.example.a122mm.helper.fixEncoding
+import com.example.a122mm.helper.updateInList
 import com.example.a122mm.sections.CollectionItem
 import com.example.a122mm.sections.EpisodeData
 import com.example.a122mm.sections.MoreLikeThisItem
@@ -93,8 +93,6 @@ import com.example.a122mm.sections.TabMoreLikeThis
 import com.example.a122mm.sections.TabTrailer
 import com.example.a122mm.sections.TrailerItem
 import com.example.a122mm.sections.TvEpisodes
-import com.example.a122mm.utility.BannerStorage.loadBanner
-import com.example.a122mm.utility.BannerStorage.saveBanner
 import com.example.a122mm.utility.formatDurationFromMinutes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -1230,19 +1228,19 @@ fun MovieAction(
 //    }
 //}
 
-fun updateInList(mId: String, inList: String, context: Context) {
-    val types = listOf("HOM", "MOV", "TVG")
-
-    for (type in types) {
-        val (cachedJson, cachedColor, expired) = loadBanner(context, type)
-        if (cachedJson != null && cachedJson.optString("mId") == mId) {
-            cachedJson.put("inList", inList)
-            saveBanner(
-                context,
-                type,
-                cachedJson.toString(),
-                cachedColor?.value?.toInt() ?: 0
-            )
-        }
-    }
-}
+//fun updateInList(mId: String, inList: String, context: Context) {
+//    val types = listOf("HOM", "MOV", "TVG")
+//
+//    for (type in types) {
+//        val (cachedJson, cachedColor, expired) = loadBanner(context, type)
+//        if (cachedJson != null && cachedJson.optString("mId") == mId) {
+//            cachedJson.put("inList", inList)
+//            saveBanner(
+//                context,
+//                type,
+//                cachedJson.toString(),
+//                cachedColor?.value?.toInt() ?: 0
+//            )
+//        }
+//    }
+//}
