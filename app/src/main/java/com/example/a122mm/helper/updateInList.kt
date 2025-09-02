@@ -19,4 +19,7 @@ fun updateInList(mId: String, inList: String, context: Context) {
             )
         }
     }
+
+    // ✅ also update the global override so ANY page sees the change
+    InListCache.set(context, mId, inList)
 }

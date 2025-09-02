@@ -355,5 +355,4 @@ fun ViewRecentWatch(
             }
         }
     }
-
 }

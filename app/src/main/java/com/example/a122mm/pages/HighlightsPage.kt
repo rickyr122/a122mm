@@ -37,6 +37,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,13 +48,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.example.a122mm.dataclass.ApiClient
+import com.example.a122mm.helper.InListCache.get
 import com.example.a122mm.helper.fixEncoding
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -163,6 +169,17 @@ class HighlightsViewModel : ViewModel() {
         }
     }
 
+    fun updateInListLocally(filter: String, mId: String, newInList: String) {
+        val current = cache[filter] ?: return
+        val updated = current.map { it ->
+            if (it.mId == mId) it.copy(inList = newInList) else it
+        }
+        cache[filter] = updated
+
+        // If this filter is currently displayed, reflect it immediately
+        _ui.value = HighlightsUi.Data(updated)
+    }
+
     fun forceRefresh(filter: String) = load(filter, force = true)
 }
 
@@ -172,8 +189,8 @@ class HighlightsViewModel : ViewModel() {
 fun HighlightsPage(
     modifier: Modifier = Modifier,
     activeCode: String = "RECENT",
-    onMyListChanged: () -> Unit = {},
-    viewModel: HighlightsViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    onRefreshTriggered: () -> Unit = {},
+    viewModel: HighlightsViewModel = viewModel()
 ) {
     // Trigger load when pills change
     LaunchedEffect(activeCode) {
@@ -226,7 +243,8 @@ fun HighlightsPage(
                         HighlightCard(
                             item = item,
                             activeCode = activeCode,
-                            rank = idx + 1
+                            rank = idx + 1,
+                            onRefreshTriggered = onRefreshTriggered
                         )
                     }
                     //Spacer(Modifier.height(12.dp))
@@ -241,19 +259,32 @@ private fun HighlightCard(
     item: HighlightItem,
     activeCode: String,
     rank: Int,
-    onMyListChanged: () -> Unit = {}
+    onRefreshTriggered: () -> Unit = {}
 ) {
     val configuration = LocalConfiguration.current
     val isTablet = configuration.screenWidthDp >= 600
 
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val myListApi = ApiClient.create(HighlightsApi::class.java)
 
-    var localInList by androidx.compose.runtime.remember { mutableStateOf(item.inList) }
-    var isLoading by androidx.compose.runtime.remember { mutableStateOf(false) }
+    //var localInList by androidx.compose.runtime.remember { mutableStateOf(item.inList) }
+    var isLoading by remember { mutableStateOf(false) }
 
     val showTop10 = activeCode == "TOP10_MOV" || activeCode == "TOP10_TVG"
+
+    val highlightsVm: HighlightsViewModel = viewModel()
+
+    // 1) initial state prefers override if present
+    var localInList by remember {
+        mutableStateOf(get(context, item.mId) ?: item.inList)
+    }
+
+    // 2) react to any later override changes published from anywhere
+    val overrides = com.example.a122mm.helper.InListCache.map.collectAsStateWithLifecycle().value
+    LaunchedEffect(overrides[item.mId]) {
+        overrides[item.mId]?.let { localInList = it }
+    }
 
     Box(modifier = Modifier.fillMaxWidth()) {
 
@@ -471,8 +502,14 @@ private fun HighlightCard(
                                 if (resp?.isSuccessful == true) {
                                     com.example.a122mm.helper.updateInList(item.mId, nextValue, context)
                                     withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                        // 1) instant local flip
                                         localInList = nextValue
-                                        onMyListChanged()
+                                        // 2) patch VM cache → UI updates without a reload
+                                        highlightsVm.updateInListLocally(activeCode, item.mId, nextValue)
+                                        // 3) tell the rest of the app (ViewContent, etc.) to refresh
+                                        onRefreshTriggered()
+                                        // 4) SWR: background refresh for server truth (no spinner since cache exists)
+                                        highlightsVm.forceRefresh(activeCode)
                                     }
                                 }
                                 withContext(kotlinx.coroutines.Dispatchers.Main) {
