@@ -110,37 +110,62 @@ sealed interface HighlightsUi {
 }
 
 class HighlightsViewModel : ViewModel() {
-    // Use the correct API for highlights (NOT ApiServiceRecent)
     private val api = ApiClient.create(HighlightsApi::class.java)
 
     private val _ui = mutableStateOf<HighlightsUi>(HighlightsUi.Loading)
     val ui: State<HighlightsUi> = _ui
 
-    fun load(filter: String) {
+    // cache: one list per filter
+    private val cache = androidx.compose.runtime.mutableStateMapOf<String, List<HighlightItem>>()
+
+    // optional: track if we've ever loaded a filter
+    private val firstLoadDone = mutableSetOf<String>()
+
+    fun load(filter: String, force: Boolean = false) {
+        val cached = cache[filter]
+
+        // 1) If we have cache and not forcing → show it immediately, no spinner
+        if (cached != null && !force) {
+            _ui.value = HighlightsUi.Data(cached)
+        } else {
+            // only show spinner on first ever load of a filter
+            if (cached == null) _ui.value = HighlightsUi.Loading
+        }
+
+        // 2) Special rule for SHOULD: if we already have cache and not forcing, SKIP network
+        if (filter == "SHOULD" && cached != null && !force) return
+
+        // 3) Otherwise fetch (SWR for other filters; one-time for SHOULD)
         viewModelScope.launch {
-            _ui.value = HighlightsUi.Loading
             runCatching { api.getHighlights(filter = filter) }
                 .onSuccess { list ->
-                    _ui.value = HighlightsUi.Data(
-                        list.map { dto ->
-                            HighlightItem(
-                                mId = dto.mId,
-                                mTitle = dto.mTitle,
-                                cvrUrl = dto.cvrUrl,
-                                enLogo = dto.enLogo,
-                                mDescription = dto.mDescription,
-                                mContent = dto.mContent!!,
-                                inList = dto.inList
-                            )
-                        }
-                    )
+                    val items = list.map { dto ->
+                        HighlightItem(
+                            mId = dto.mId,
+                            mTitle = dto.mTitle,
+                            cvrUrl = dto.cvrUrl,
+                            enLogo = dto.enLogo,
+                            mDescription = dto.mDescription,
+                            mContent = dto.mContent!!,
+                            inList = dto.inList
+                        )
+                    }
+                    cache[filter] = items
+                    firstLoadDone += filter
+                    _ui.value = HighlightsUi.Data(items)
                 }
                 .onFailure { e ->
-                    _ui.value = HighlightsUi.Error(e.message ?: "Failed to load")
+                    // if we have cache, keep showing it; only error on first ever load
+                    if (cached == null) {
+                        _ui.value = HighlightsUi.Error(e.message ?: "Failed to load")
+                    }
                 }
         }
     }
+
+    fun forceRefresh(filter: String) = load(filter, force = true)
 }
+
 
 // ===== Composable =====
 @Composable
@@ -239,9 +264,17 @@ private fun HighlightCard(
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .offset(x = 0.dp, y = 24.dp) // fully left-aligned
-//                    .width(92.dp)
                     .fillMaxWidth()
-                    .height(72.dp),
+                    .height(72.dp)
+                    .border(
+                        width = 1.dp, // thickness of the gradient border
+                        brush = Brush.horizontalGradient(
+                            colors = listOf(Color.White.copy(alpha = 0.2f), Color.Transparent),
+                            startX = 0f,
+                            endX = Float.POSITIVE_INFINITY
+                        ),
+                        shape = RoundedCornerShape(16.dp)
+                    ),
                 shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = Color.Transparent)
             ) {
@@ -250,7 +283,7 @@ private fun HighlightCard(
                         .fillMaxSize() //matchParentSize()
                         .background(
                             brush = Brush.verticalGradient(
-                                colors = listOf(Color(0xFF21221C), Color(0xFF101010))
+                                colors = listOf(Color(0xFF21221C), Color(0xFF1A1A1A))
                             ),
                             shape = RoundedCornerShape(16.dp)
                         ),
@@ -270,12 +303,12 @@ private fun HighlightCard(
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 92.sp
                 )
-
+                val borderWidth = if (isTablet) 6f else 8f
                 // Outline layer (white border only)
                 Text(
                     text = text,
                     style = baseStyle.copy(
-                        drawStyle = Stroke(width = 8f) // thickness of outline
+                        drawStyle = Stroke(width = borderWidth) // thickness of outline
                     ),
                     color = Color.White
                 )
@@ -291,10 +324,11 @@ private fun HighlightCard(
         }
 
         // 3) Main card
+        val pushDown = if (isTablet) 60.dp else 52.dp
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = if (showTop10) 52.dp else 0.dp) // push main card down when TOP10
+                .padding(top = if (showTop10) pushDown else 0.dp) // push main card down when TOP10
                 .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(16.dp)),
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(
@@ -472,24 +506,5 @@ private fun HighlightCard(
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun RankNumberOverlay(rank: Int, modifier: Modifier = Modifier) {
-    val text = rank.toString().padStart(2, '0')
-
-    Box(modifier = modifier) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.displayLarge.copy(fontWeight = FontWeight.ExtraBold),
-            color = Color.Black.copy(alpha = 0.85f)
-        )
-        Text(
-            text = text,
-            modifier = Modifier.padding(start = 2.dp, top = 2.dp),
-            style = MaterialTheme.typography.displayLarge.copy(fontWeight = FontWeight.ExtraBold),
-            color = Color.White
-        )
     }
 }
