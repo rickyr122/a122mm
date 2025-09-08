@@ -3,6 +3,7 @@ package com.example.a122mm.screen
 import android.app.Activity
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.animateColorAsState
@@ -43,6 +44,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.VideoLibrary
+import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Search
@@ -53,6 +55,8 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -67,7 +71,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -101,7 +104,15 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
     val scrollOffset = scrollState.value
     val isHomeTab = selectedItem == 0
 
-    //val topBarAlpha = (scrollOffset.coerceIn(0, 300) / 300f) * 0.8f
+    // Search-mode state
+    var lastNonSearchTab by rememberSaveable { mutableStateOf(0) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+
+    // System back = exit search
+    BackHandler(enabled = selectedItem == 1) {
+        selectedItem = lastNonSearchTab
+        searchQuery = ""
+    }
 
     // Restore selected tab when coming back from detail page
     val savedStateHandle = navController.currentBackStackEntry?.savedStateHandle
@@ -111,20 +122,13 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
         }
     }
 
-    // at the top of HomeScreen() composable body
+    // Highlights state
     var highlightsSelected by rememberSaveable { mutableStateOf(0) }
     var highlightsCode by rememberSaveable { mutableStateOf("RECENT") }
 
-//    val navItems = listOf(
-//        BottomNavItem("Home", Icons.Filled.Home, Icons.Outlined.Home),
-//        BottomNavItem("Movies", Icons.Filled.Movie, Icons.Outlined.Movie),
-//        BottomNavItem("TV Shows", Icons.Filled.Tv, Icons.Outlined.Tv),
-//        BottomNavItem("Profile", Icons.Filled.Person, Icons.Outlined.Person, isImage = true)
-//    )
-
     val navItems = listOf(
         BottomNavItem("Home", Icons.Filled.Home, Icons.Outlined.Home),
-        BottomNavItem( "Search",Icons.Filled.Search, Icons.Outlined.Search),
+        BottomNavItem("Search", Icons.Filled.Search, Icons.Outlined.Search),
         BottomNavItem("Highlights", Icons.Filled.VideoLibrary, Icons.Outlined.VideoLibrary),
         BottomNavItem("My Room", Icons.Filled.Person, Icons.Outlined.Person, isImage = true)
     )
@@ -140,29 +144,17 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     val isTablet = configuration.screenWidthDp >= 600
 
-    val bannerAspectRatio = when {
-        isTablet && isLandscape -> 21f / 9f
-        isTablet && !isLandscape -> 16f / 9f
-        !isTablet && isLandscape -> 2.5f
-        else -> 3f / 4f
-    }
-
     val context = LocalContext.current
-
     LaunchedEffect(Unit) {
-        if (!isTablet) {
-            context.setScreenOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT)
-        }
+        if (!isTablet) context.setScreenOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT)
     }
 
     val view = LocalView.current
     val activity = LocalContext.current as Activity
-
     SideEffect {
         val window = activity.window
         window.statusBarColor = android.graphics.Color.TRANSPARENT
         window.navigationBarColor = android.graphics.Color.BLACK
-
         val insetsController = WindowCompat.getInsetsController(window, view)
         insetsController.isAppearanceLightStatusBars = false
         insetsController.isAppearanceLightNavigationBars = false
@@ -170,6 +162,7 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
 
     // Dominant color and smooth transition
     var dominantColor by remember { mutableStateOf(Color(0xFF262626)) }
+    var hasDominant by remember { mutableStateOf(false) }
 
     val animatedTopColor by animateColorAsState(
         targetValue = if (scrollOffset > 500) Color.Black else dominantColor,
@@ -177,6 +170,7 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
         label = "AnimatedTopColor"
     )
 
+    // GRADIENT that will sit behind the whole Scaffold
     val backgroundBrush = Brush.verticalGradient(
         colors = listOf(animatedTopColor, Color.Black)
     )
@@ -184,209 +178,265 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
     var selectedCategory by rememberSaveable { mutableStateOf<String?>(null) }
 
     var logoBottomPx by remember { mutableStateOf(0) }
-    var selectorTopPx by remember { mutableStateOf(0) }
     var selectorBottomPx by remember { mutableStateOf(0) }
-
-    val density = LocalDensity.current
-
-    // NEW: track if selector is touching logo bottom
     var selectorTouchesLogo by remember { mutableStateOf(false) }
     var pillsHeightPx by remember { mutableStateOf(0) }
 
-    Scaffold(
-        containerColor = Color.Transparent,
-        topBar = {
-            @OptIn(ExperimentalAnimationApi::class)
-            val isSelectorHidden = selectorBottomPx <= logoBottomPx
+    val isSelectorHidden = selectorBottomPx <= logoBottomPx
+    val isBackgroundBlack = scrollOffset > 600
 
-//            val topBarAlpha = when {
-//                isSelectorHidden -> 0.5f  // Selector hidden: topBar at 80% opacity
-//                selectorTouchesLogo -> 0.8f  // Selector visible but touching logo: full opacity
-//                else -> (scrollState.value.coerceIn(0, 300) / 300f) * 0.8f  // Normal scroll-based alpha
-//            }
-
-            val isBackgroundBlack = scrollOffset > 600
-
-//            val targetTopBarColor = if (isBackgroundBlack) {
-//                Color.Black.copy(alpha = 0.8f)
-//            } else {
-//                when {
-//                    isSelectorHidden -> dominantColor.copy(alpha = 0.8f)
-//                    selectorTouchesLogo -> dominantColor.copy(alpha = 1f)
-//                    else -> dominantColor.copy(alpha = (scrollState.value.coerceIn(0, 300) / 300f) * 0.8f)
-//                }
-//            }
-            val targetTopBarColor =
-                if (selectedItem == 2) {
-                    // ✅ Highlights tab → force solid black
-                    Color.Black
-                } else if (!isHomeTab) {
-                    // Other non-Home tabs → semi-transparent black
-                    Color.Black.copy(alpha = 0.8f)
-                } else {
-                    // Home tab → existing scroll/dominant logic
-                    if (isBackgroundBlack) {
-                        Color.Black.copy(alpha = 0.8f)
-                    } else {
-                        when {
-                            isSelectorHidden    -> dominantColor.copy(alpha = 0.8f)
-                            selectorTouchesLogo -> dominantColor.copy(alpha = 1f)
-                            else -> dominantColor.copy(
-                                alpha = (scrollState.value.coerceIn(0, 300) / 300f) * 0.8f
-                            )
-                        }
-                    }
-                }
-
-            val animatedTopBarColor by animateColorAsState(
-                targetValue = targetTopBarColor,
-                animationSpec = tween(durationMillis = 500)
-            )
-
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(animatedTopBarColor)
-                    .padding(
-                        top = systemBars.calculateTopPadding(),
-                        start = 16.dp,
-                        end = endPadding
+    val targetTopBarColor =
+        if (selectedItem == 2) {
+            // ✅ Highlights tab → force solid black
+            Color.Black
+        } else if (selectedItem == 1) {
+            // ✅ Search tab → force solid black
+            Color.Black
+        } else if (!isHomeTab) {
+            // Other non-Home tabs → semi-transparent black
+            Color.Black.copy(alpha = 0.8f)
+        } else {
+            // Home tab → existing scroll/dominant logic
+            if (isBackgroundBlack) {
+                Color.Black.copy(alpha = 0.8f)
+            } else {
+                when {
+                    isSelectorHidden    -> dominantColor.copy(alpha = 0.8f)
+                    selectorTouchesLogo -> dominantColor.copy(alpha = 1f)
+                    else -> dominantColor.copy(
+                        alpha = (scrollState.value.coerceIn(0, 300) / 300f) * 0.8f
                     )
-            ) {
-                // Logo + Search Row
-                Row(
+                }
+            }
+        }
+
+    val animatedTopBarColor by animateColorAsState(
+        targetValue = targetTopBarColor,
+        animationSpec = tween(durationMillis = 500)
+    )
+
+    // ====== LAYOUT ======
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(backgroundBrush) // gradient behind EVERYTHING
+    ) {
+        Scaffold(
+            containerColor = Color.Transparent,
+            topBar = {
+                @OptIn(ExperimentalAnimationApi::class)
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(64.dp)
-                        .padding(vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                        .background(animatedTopBarColor) // often Transparent on Home
+                        .padding(
+                            top = systemBars.calculateTopPadding(),
+                            start = if (selectedItem == 1) 0.dp else 16.dp,
+                            end = if (selectedItem == 1) 0.dp else endPadding
+                        )
                 ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.a122mm_logo),
-                        contentDescription = "Logo",
-                        modifier = Modifier
+                    if (selectedItem == 1) {
+                        // Row 1: Back (padded)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(56.dp)
+                                .padding(horizontal = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.ArrowBack,
+                                contentDescription = "Back",
+                                tint = Color.White,
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clickable {
+                                        selectedItem = lastNonSearchTab
+                                        searchQuery = ""
+                                    }
+                                    .padding(8.dp)
+                            )
+                        }
+
+                        // Row 2: Full-bleed grey search bar
+                        val searchRowHeight = 56.dp
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(searchRowHeight)
+                                .background(Color(0xFF1A1A1A))
+                        ) {
+                            TextField(
+                                value = searchQuery,
+                                onValueChange = { searchQuery = it },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(searchRowHeight)
+                                    .align(Alignment.CenterStart),
+                                placeholder = {
+                                    Text(
+                                        "Search games, shows, movies…",
+                                        color = Color(0xFF8C8C8C),
+                                        fontSize = 16.sp
+                                    )
+                                },
+                                singleLine = true,
+                                leadingIcon = {
+                                    Icon(Icons.Outlined.Search, contentDescription = null, tint = Color(0xFF8C8C8C))
+                                },
+                                colors = TextFieldDefaults.colors(
+                                    focusedContainerColor = Color.Transparent,
+                                    unfocusedContainerColor = Color.Transparent,
+                                    disabledContainerColor = Color.Transparent,
+                                    cursorColor = Color.White,
+                                    focusedIndicatorColor = Color.Transparent,
+                                    unfocusedIndicatorColor = Color.Transparent,
+                                    disabledIndicatorColor = Color.Transparent,
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White
+                                )
+                            )
+                        }
+                    } else {
+                        // Default top row with logo
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(64.dp)
+                                .padding(vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Image(
+                                painter = painterResource(id = R.drawable.a122mm_logo),
+                                contentDescription = "Logo",
+                                modifier = Modifier
                                     .size(48.dp)
                                     .onGloballyPositioned { coordinates ->
                                         val position = coordinates.positionInWindow()
                                         val height = coordinates.size.height
                                         logoBottomPx = (position.y + height).toInt()
                                     }
-                    )
+                            )
+                        }
+
+                        // HIGHLIGHTS pills (tab 2)
+                        if (selectedItem == 2) {
+                            val coroutineScope = rememberCoroutineScope()
+                            com.example.a122mm.components.DiscoveryFilters(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 2.dp)
+                                    .onGloballyPositioned { coords ->
+                                        pillsHeightPx = coords.size.height
+                                    },
+                                selectedIndex = highlightsSelected,
+                                onSelected = { idx, code ->
+                                    highlightsSelected = idx
+                                    highlightsCode = code
+                                    coroutineScope.launch { scrollState.animateScrollTo(0) }
+                                }
+                            )
+                            Spacer(Modifier.height(6.dp))
+                        }
+                    }
                 }
-                val coroutineScope = rememberCoroutineScope()
-                // ✅ FIXED HIGHLIGHTS PILLS under the logo (visible only on Highlights tab)
-                if (selectedItem == 2) {
-                    com.example.a122mm.components.DiscoveryFilters(
+            },
+            bottomBar = {
+                // Hide bottom bar in Search
+                if (selectedItem != 1) {
+                    NavigationBar(
+                        containerColor = Color.Black,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 2.dp)  // breathing room inside the bar
-                            .onGloballyPositioned { coords ->
-                            pillsHeightPx = coords.size.height   // ✅ capture height in px
-                        },
-                        selectedIndex = highlightsSelected,
-                        onSelected = { idx, code ->
-                            highlightsSelected = idx
-                            highlightsCode = code
-
-                            // 🔁 reset the CONTENT scroll to top
-                            coroutineScope.launch {
-                                scrollState.animateScrollTo(0)   // or scrollTo(0) for instant jump
-                            }
-                        }
-                    )
-                    // Optional tiny gap before the page content starts:
-                    Spacer(Modifier.height(6.dp))
-                }
-            }
-        },
-        bottomBar = {
-            NavigationBar(
-                containerColor = Color.Black,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(
-                        start = navBars.calculateStartPadding(layoutDirection),
-                        end = navBars.calculateEndPadding(layoutDirection)
-                    )
-            ) {
-                navItems.forEachIndexed { index, item ->
-                    val isSelected = selectedItem == index
-                    val isProfile = item.label == "My Room"
-
-                    NavigationBarItem(
-                        selected = isSelected,
-                        onClick = { selectedItem = index },
-                        icon = {
-                            if (item.isImage) {
-                                Image(
-                                    painter = painterResource(id = R.drawable.spiderman),
-                                    contentDescription = "Profile",
-                                    modifier = Modifier
-                                        .size(24.dp)
-                                        .clip(CircleShape)
-                                        .then(
-                                            if (isSelected && isProfile) Modifier.border(1.dp, Color.White, CircleShape)
-                                            else Modifier
-                                        ),
-                                    contentScale = ContentScale.Crop
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = if (isSelected) item.selectedIcon else item.unselectedIcon,
-                                    contentDescription = item.label,
-                                    tint = if (isSelected) Color.White else Color.Gray
-                                )
-                            }
-                        },
-                        label = {
-                            Text(
-                                text = item.label,
-                                color = if (isSelected) Color.White else Color.Gray
+                            .padding(
+                                start = navBars.calculateStartPadding(layoutDirection),
+                                end = navBars.calculateEndPadding(layoutDirection)
                             )
-                        },
-                        alwaysShowLabel = true,
-                        colors = NavigationBarItemDefaults.colors(
-                            indicatorColor = Color.Black
-                        )
-                    )
+                    ) {
+                        navItems.forEachIndexed { index, item ->
+                            val isSelected = selectedItem == index
+                            val isProfile = item.label == "My Room"
+
+                            NavigationBarItem(
+                                selected = isSelected,
+                                onClick = {
+                                    if (index == 1) {
+                                        if (selectedItem != 1) lastNonSearchTab = selectedItem
+                                        selectedItem = 1
+                                    } else {
+                                        lastNonSearchTab = index
+                                        selectedItem = index
+                                    }
+                                },
+                                icon = {
+                                    if (item.isImage) {
+                                        Image(
+                                            painter = painterResource(id = R.drawable.spiderman),
+                                            contentDescription = "Profile",
+                                            modifier = Modifier
+                                                .size(24.dp)
+                                                .clip(CircleShape)
+                                                .then(
+                                                    if (isSelected && isProfile) Modifier.border(1.dp, Color.White, CircleShape)
+                                                    else Modifier
+                                                ),
+                                            contentScale = ContentScale.Crop
+                                        )
+                                    } else {
+                                        Icon(
+                                            imageVector = if (isSelected) item.selectedIcon else item.unselectedIcon,
+                                            contentDescription = item.label,
+                                            tint = if (isSelected) Color.White else Color.Gray
+                                        )
+                                    }
+                                },
+                                label = {
+                                    Text(
+                                        text = item.label,
+                                        color = if (isSelected) Color.White else Color.Gray
+                                    )
+                                },
+                                alwaysShowLabel = true,
+                                colors = NavigationBarItemDefaults.colors(
+                                    indicatorColor = Color.Black
+                                )
+                            )
+                        }
+                    }
                 }
             }
-        }
-    ) { innerPadding ->
-
-        Box(
-            modifier = Modifier
-                .background(
-                    if (selectedItem == 0) backgroundBrush
-                    else SolidColor(Color.Black)
-                )
-        ) {
-
-            ContentScreen(
+        ) { innerPadding ->
+            Box(
                 modifier = Modifier
-                    .padding(
-                        start = innerPadding.calculateStartPadding(LocalLayoutDirection.current),
-                        end = innerPadding.calculateEndPadding(LocalLayoutDirection.current),
-                        bottom = innerPadding.calculateBottomPadding(),
-                        top = if (selectedItem == 2) with(LocalDensity.current) { pillsHeightPx.toDp() } else 0.dp
-                    ),
-                navController = navController,
-                selectedCategory = selectedCategory,
-                onSelectedCategoryChange = { selectedCategory = it },
-                selectedIndex = selectedItem,
-                scrollState = scrollState,
-                onDominantColorExtracted = { color ->
-                    // Home only changes dominant color
-                    if (isHomeTab) dominantColor = color
-                },
-                logoBottomPx = logoBottomPx,
-                onSelectorBottomChange = { bottomPx -> selectorBottomPx = bottomPx },
-                onSelectorTouchChange = { touching ->
-                    selectorTouchesLogo = touching
-                },
-                highlightsCode = highlightsCode
-            )
+                    .background(if (selectedItem == 0) Color.Transparent else Color.Black)
+            ) {
+                ContentScreen(
+                    modifier = Modifier
+                        .padding(
+                            start = innerPadding.calculateStartPadding(LocalLayoutDirection.current),
+                            end = innerPadding.calculateEndPadding(LocalLayoutDirection.current),
+                            bottom = innerPadding.calculateBottomPadding(),
+                            top = if (selectedItem == 2) with(LocalDensity.current) { pillsHeightPx.toDp() } else 0.dp
+                        ),
+                    navController = navController,
+                    selectedCategory = selectedCategory,
+                    onSelectedCategoryChange = { selectedCategory = it },
+                    selectedIndex = selectedItem,
+                    scrollState = scrollState,
+                    onDominantColorExtracted = { color ->
+                        if (isHomeTab) {
+                            dominantColor = color
+                            hasDominant = true
+                        }
+                    },
+                    logoBottomPx = logoBottomPx,
+                    onSelectorBottomChange = { selectorBottomPx = it },
+                    onSelectorTouchChange = { selectorTouchesLogo = it },
+                    highlightsCode = highlightsCode,
+                    searchQuery = searchQuery
+                )
+            }
         }
     }
 }
@@ -404,16 +454,12 @@ fun ContentScreen(
     logoBottomPx: Int,
     onSelectorTouchChange: (Boolean) -> Unit,
     onSelectorBottomChange: (Int) -> Unit,
-    highlightsCode: String
+    highlightsCode: String,
+    searchQuery: String
 ) {
-    val configuration = LocalConfiguration.current
     val layoutDirection = LocalLayoutDirection.current
-    val navBars = WindowInsets.navigationBars.asPaddingValues()
     val systemBars = WindowInsets.systemBars.asPaddingValues()
-    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-    val coroutineScope = rememberCoroutineScope()
 
-    // Track changes for animations
     var lastIndex by remember { mutableStateOf(selectedIndex) }
     var lastCategory by remember { mutableStateOf(selectedCategory) }
     val isFilterChange = selectedIndex == 0 && selectedCategory != lastCategory
@@ -424,31 +470,25 @@ fun ContentScreen(
         lastCategory = selectedCategory
     }
 
-    // Home selector fade logic vs logo
     var selectorTopPx by remember { mutableStateOf(0) }
     var selectorBottomPx by remember { mutableStateOf(0) }
 
-//    // Highlights pills state
-//    var highlightsSelected by remember { mutableStateOf(0) }
-//    var highlightsCode by remember { mutableStateOf("RECENT") }
-
-    // Parent owns the vertical scroll
     Column(
         modifier = modifier
             .verticalScroll(scrollState)
             .fillMaxSize()
     ) {
-        // Space for logo/topBar
+        val extraTopBarHeight = when (selectedIndex) {
+            1 -> 112.dp // back row + search row
+            else -> 64.dp
+        }
+
         Spacer(
-            modifier = Modifier.height(systemBars.calculateTopPadding() + 64.dp)
+            modifier = Modifier.height(systemBars.calculateTopPadding() + extraTopBarHeight)
         )
 
-        // --- HOME selector (scrolls with parent) ---
         if (selectedIndex == 0) {
-            AnimatedContent(
-                targetState = selectedCategory,
-                label = "CategoryFilterAnimation"
-            ) { category ->
+            AnimatedContent(targetState = selectedCategory, label = "CategoryFilterAnimation") { category ->
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier
@@ -458,8 +498,7 @@ fun ContentScreen(
                             val height = coordinates.size.height
                             val bottomPx = (position.y + height).toInt()
                             selectorTopPx = position.y.toInt()
-                            selectorBottomPx = (position.y + height).toInt()
-
+                            selectorBottomPx = bottomPx
                             onSelectorBottomChange(bottomPx)
                             onSelectorTouchChange(selectorTopPx <= logoBottomPx)
                         }
@@ -506,11 +545,9 @@ fun ContentScreen(
                     }
                 }
             }
-            // ✅ add extra spacing before content starts
             Spacer(modifier = Modifier.height(12.dp))
         }
 
-        // --- Page content below ---
         AnimatedContent(
             targetState = Pair(selectedIndex, selectedCategory),
             transitionSpec = {
@@ -530,21 +567,21 @@ fun ContentScreen(
             label = "PageChangeAnimation"
         ) { (index, category) ->
             val pageModifier = Modifier.fillMaxSize()
-
             when (index) {
                 0 -> when (category) {
                     "Movies" -> MoviePage(pageModifier, navController, onDominantColorExtracted, type = "MOV")
                     "TV Shows" -> SeriesPage(pageModifier, navController, onDominantColorExtracted, type = "TVG")
                     else -> HomePage(pageModifier, navController, onDominantColorExtracted, type = "HOM")
                 }
-                1 -> SearchPage(pageModifier)
-                2 -> HighlightsPage(
+                1 -> SearchPage(
                     modifier = pageModifier,
-                    activeCode = highlightsCode // ✅ pass selected pill filter
+                    showHeader = false,
+                    query = searchQuery,
+                    onQueryChange = { /* handled in top bar already; wire later if needed */ }
                 )
+                2 -> HighlightsPage(modifier = pageModifier, activeCode = highlightsCode)
                 3 -> ProfilePage(pageModifier, navController, onDominantColorExtracted, type = "PRO")
             }
         }
     }
 }
-
