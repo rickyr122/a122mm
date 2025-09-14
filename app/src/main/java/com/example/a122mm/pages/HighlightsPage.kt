@@ -151,7 +151,7 @@ class HighlightsViewModel : ViewModel() {
                             mTitle = dto.mTitle,
                             cvrUrl = dto.cvrUrl,
                             enLogo = dto.enLogo,
-                            mDescription = dto.mDescription,
+                            mDescription = dto.mDescription.fixEncoding(),
                             mContent = dto.mContent!!,
                             inList = dto.inList
                         )

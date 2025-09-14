@@ -20,6 +20,7 @@ import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -44,7 +45,6 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.VideoLibrary
-import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Search
@@ -69,15 +69,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
@@ -107,6 +111,9 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
     // Search-mode state
     var lastNonSearchTab by rememberSaveable { mutableStateOf(0) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
+
+    // 🔎 Focus control for Search TextField
+    val focusRequester = remember { FocusRequester() }
 
     // System back = exit search
     BackHandler(enabled = selectedItem == 1) {
@@ -187,16 +194,12 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
 
     val targetTopBarColor =
         if (selectedItem == 2) {
-            // ✅ Highlights tab → force solid black
             Color.Black
         } else if (selectedItem == 1) {
-            // ✅ Search tab → force solid black
             Color.Black
         } else if (!isHomeTab) {
-            // Other non-Home tabs → semi-transparent black
             Color.Black.copy(alpha = 0.8f)
         } else {
-            // Home tab → existing scroll/dominant logic
             if (isBackgroundBlack) {
                 Color.Black.copy(alpha = 0.8f)
             } else {
@@ -215,6 +218,14 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
         animationSpec = tween(durationMillis = 500)
     )
 
+    val focusManager = LocalFocusManager.current
+
+    LaunchedEffect(selectedItem, scrollState.isScrollInProgress) {
+        if (selectedItem == 1 && scrollState.isScrollInProgress) {
+            focusManager.clearFocus()
+        }
+    }
+
     // ====== LAYOUT ======
     Box(
         modifier = Modifier
@@ -228,7 +239,7 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(animatedTopBarColor) // often Transparent on Home
+                        .background(animatedTopBarColor)
                         .padding(
                             top = systemBars.calculateTopPadding(),
                             start = if (selectedItem == 1) 0.dp else 16.dp,
@@ -244,22 +255,20 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
                                 .padding(horizontal = 16.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(
-                                imageVector = Icons.Outlined.ArrowBack,
-                                contentDescription = "Back",
-                                tint = Color.White,
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clickable {
-                                        selectedItem = lastNonSearchTab
-                                        searchQuery = ""
-                                    }
-                                    .padding(8.dp)
-                            )
+                            // (Back icon intentionally commented out as in your file)
                         }
 
                         // Row 2: Full-bleed grey search bar
                         val searchRowHeight = 56.dp
+
+                        // 🔥 Request focus every time Search tab is active.
+                        // Scope this effect INSIDE the branch so TextField exists first.
+                        LaunchedEffect(Unit) {
+                            // optional tiny yield if some devices race; uncomment if needed:
+                            // delay(30)
+                            focusRequester.requestFocus()
+                        }
+
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -272,17 +281,22 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(searchRowHeight)
-                                    .align(Alignment.CenterStart),
+                                    .align(Alignment.CenterStart)
+                                    .focusRequester(focusRequester), // ← attach requester
                                 placeholder = {
                                     Text(
-                                        "Search games, shows, movies…",
+                                        "Search shows, movies…",
                                         color = Color(0xFF8C8C8C),
                                         fontSize = 16.sp
                                     )
                                 },
                                 singleLine = true,
                                 leadingIcon = {
-                                    Icon(Icons.Outlined.Search, contentDescription = null, tint = Color(0xFF8C8C8C))
+                                    Icon(
+                                        Icons.Outlined.Search,
+                                        contentDescription = null,
+                                        tint = Color(0xFF8C8C8C)
+                                    )
                                 },
                                 colors = TextFieldDefaults.colors(
                                     focusedContainerColor = Color.Transparent,
@@ -343,66 +357,63 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
                 }
             },
             bottomBar = {
-                // Hide bottom bar in Search
-                if (selectedItem != 1) {
-                    NavigationBar(
-                        containerColor = Color.Black,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(
-                                start = navBars.calculateStartPadding(layoutDirection),
-                                end = navBars.calculateEndPadding(layoutDirection)
-                            )
-                    ) {
-                        navItems.forEachIndexed { index, item ->
-                            val isSelected = selectedItem == index
-                            val isProfile = item.label == "My Room"
+                NavigationBar(
+                    containerColor = Color.Black,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            start = navBars.calculateStartPadding(layoutDirection),
+                            end = navBars.calculateEndPadding(layoutDirection)
+                        )
+                ) {
+                    navItems.forEachIndexed { index, item ->
+                        val isSelected = selectedItem == index
+                        val isProfile = item.label == "My Room"
 
-                            NavigationBarItem(
-                                selected = isSelected,
-                                onClick = {
-                                    if (index == 1) {
-                                        if (selectedItem != 1) lastNonSearchTab = selectedItem
-                                        selectedItem = 1
-                                    } else {
-                                        lastNonSearchTab = index
-                                        selectedItem = index
-                                    }
-                                },
-                                icon = {
-                                    if (item.isImage) {
-                                        Image(
-                                            painter = painterResource(id = R.drawable.spiderman),
-                                            contentDescription = "Profile",
-                                            modifier = Modifier
-                                                .size(24.dp)
-                                                .clip(CircleShape)
-                                                .then(
-                                                    if (isSelected && isProfile) Modifier.border(1.dp, Color.White, CircleShape)
-                                                    else Modifier
-                                                ),
-                                            contentScale = ContentScale.Crop
-                                        )
-                                    } else {
-                                        Icon(
-                                            imageVector = if (isSelected) item.selectedIcon else item.unselectedIcon,
-                                            contentDescription = item.label,
-                                            tint = if (isSelected) Color.White else Color.Gray
-                                        )
-                                    }
-                                },
-                                label = {
-                                    Text(
-                                        text = item.label,
-                                        color = if (isSelected) Color.White else Color.Gray
+                        NavigationBarItem(
+                            selected = isSelected,
+                            onClick = {
+                                if (index == 1) {
+                                    if (selectedItem != 1) lastNonSearchTab = selectedItem
+                                    selectedItem = 1
+                                } else {
+                                    lastNonSearchTab = index
+                                    selectedItem = index
+                                }
+                            },
+                            icon = {
+                                if (item.isImage) {
+                                    Image(
+                                        painter = painterResource(id = R.drawable.spiderman),
+                                        contentDescription = "Profile",
+                                        modifier = Modifier
+                                            .size(24.dp)
+                                            .clip(CircleShape)
+                                            .then(
+                                                if (isSelected && isProfile) Modifier.border(1.dp, Color.White, CircleShape)
+                                                else Modifier
+                                            ),
+                                        contentScale = ContentScale.Crop
                                     )
-                                },
-                                alwaysShowLabel = true,
-                                colors = NavigationBarItemDefaults.colors(
-                                    indicatorColor = Color.Black
+                                } else {
+                                    Icon(
+                                        imageVector = if (isSelected) item.selectedIcon else item.unselectedIcon,
+                                        contentDescription = item.label,
+                                        tint = if (isSelected) Color.White else Color.Gray
+                                    )
+                                }
+                            },
+                            label = {
+                                Text(
+                                    text = item.label,
+                                    color = if (isSelected) Color.White else Color.Gray
                                 )
+                            },
+                            alwaysShowLabel = true,
+                            colors = NavigationBarItemDefaults.colors(
+                                indicatorColor = Color.Black
                             )
-                        }
+                        )
                     }
                 }
             }
@@ -410,6 +421,15 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
             Box(
                 modifier = Modifier
                     .background(if (selectedItem == 0) Color.Transparent else Color.Black)
+                    .then(
+                        if (selectedItem == 1) {
+                            Modifier.pointerInput(Unit) {
+                                detectTapGestures(
+                                    onTap = { focusManager.clearFocus() }  // hide cursor + keyboard
+                                )
+                            }
+                        } else Modifier
+                    )
             ) {
                 ContentScreen(
                     modifier = Modifier
@@ -576,8 +596,9 @@ fun ContentScreen(
                 1 -> SearchPage(
                     modifier = pageModifier,
                     showHeader = false,
-                    query = searchQuery,
-                    onQueryChange = { /* handled in top bar already; wire later if needed */ }
+                    navController
+//                    query = searchQuery,
+//                    onQueryChange = { /* handled in top bar already; wire later if needed */ }
                 )
                 2 -> HighlightsPage(modifier = pageModifier, activeCode = highlightsCode)
                 3 -> ProfilePage(pageModifier, navController, onDominantColorExtracted, type = "PRO")

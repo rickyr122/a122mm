@@ -6,4 +6,5 @@ fun String.fixEncoding(): String {
         .replace("\\\"", "\"") // replace \" with "
         .replace("~", ": ")     // replace ~ with :
         .replace("`", "'")     // keep your earlier replacement
+        .replace("[\u2012\u2013\u2014\u2015\u2212]".toRegex(), "-")
 }
