@@ -1,5 +1,6 @@
 package com.example.a122mm.pages
 
+import android.content.res.Configuration
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.fadeIn
@@ -9,10 +10,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -294,7 +292,9 @@ fun SearchPage(
                 fontSize = 16.sp,
                 modifier = Modifier.padding(vertical = 8.dp)
             )
-            // Recommended is already visible by showRecommended=true in this case
+            Spacer(Modifier.height(12.dp))
+            // Always show Recommended below the empty state
+            RecommendedSection(recLoading, recError, recItems, navController)
         }
     }
 }
@@ -380,56 +380,75 @@ private fun RecRow(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun PosterGrid(
     items: List<SearchItem>,
     navController: NavController?
 ) {
-    // width-bounded, height wraps content => safe inside parent verticalScroll
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val columns = 3
-        val hGap = 8.dp
-        val vGap = 12.dp
-        val totalGap = hGap * (columns - 1)
-        val cellWidth = (maxWidth - totalGap) / columns
-        val ctx = LocalContext.current
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val isTablet = configuration.screenWidthDp >= 600
 
-        FlowRow(
-            maxItemsInEachRow = columns,
-            horizontalArrangement = Arrangement.spacedBy(hGap),
-            verticalArrangement = Arrangement.spacedBy(vGap),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            items.forEach { item ->
-                Card(
-                    shape = RoundedCornerShape(6.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A1A)),
-                    modifier = Modifier
-                        .width(cellWidth)
-                        .aspectRatio(2f / 3f) // poster ratio 2:3
-                        .clip(RoundedCornerShape(6.dp))
-                        .clickable {
-                            navController?.currentBackStackEntry
-                                ?.savedStateHandle?.set("selectedTab", 1)
-                            navController?.navigate("movie/${item.mId}")
+    // 1) phone → 3, tablet portrait → 3, tablet landscape → 4
+    val columns = if (isTablet && isLandscape) 5 else 3
+
+    val hGap = 8.dp
+    val vGap = 12.dp
+    val ctx = LocalContext.current
+
+    // Chunk items into rows of `columns`
+    val rows: List<List<SearchItem>> = remember(items, columns) {
+        if (items.isEmpty()) emptyList() else items.chunked(columns)
+    }
+
+    Column(Modifier.fillMaxWidth()) {
+        rows.forEachIndexed { rowIndex, rowItems ->
+            if (rowIndex > 0) Spacer(Modifier.height(vGap))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(hGap)
+            ) {
+                // Render exactly `columns` cells per row. If last row is short, pad with spacers.
+                for (i in 0 until columns) {
+                    if (i < rowItems.size) {
+                        val item = rowItems[i]
+                        Card(
+                            shape = RoundedCornerShape(6.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A1A)),
+                            modifier = Modifier
+                                .weight(1f)              // <-- exact equal width cells
+                                .aspectRatio(2f / 3f)    // 2:3 poster
+                                .clip(RoundedCornerShape(6.dp))
+                                .clickable {
+                                    navController?.currentBackStackEntry
+                                        ?.savedStateHandle?.set("selectedTab", 1)
+                                    navController?.navigate("movie/${item.mId}")
+                                }
+                        ) {
+                            AsyncImage(
+                                model = ImageRequest.Builder(ctx)
+                                    .data(item.cvrUrl)
+                                    .crossfade(false) // avoid per-image stacking
+                                    .build(),
+                                contentDescription = item.mId,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
                         }
-                ) {
-                    // Disable per-image crossfade to avoid stacked/flicker look
-                    AsyncImage(
-                        model = ImageRequest.Builder(ctx)
-                            .data(item.cvrUrl)
-                            .crossfade(false)
-                            .build(),
-                        contentDescription = item.mId, // tag/desc
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
+                    } else {
+                        // pad cell to keep row layout stable
+                        Spacer(
+                            Modifier
+                                .weight(1f)
+                                .aspectRatio(2f / 3f)
+                        )
+                    }
                 }
             }
         }
     }
 }
+
 
 @Composable
 private fun RecommendedSection(
