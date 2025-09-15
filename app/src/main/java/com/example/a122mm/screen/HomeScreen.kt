@@ -285,7 +285,7 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
                                     .focusRequester(focusRequester), // ← attach requester
                                 placeholder = {
                                     Text(
-                                        "Search shows, movies…",
+                                        "Search shows, movies, and more…",
                                         color = Color(0xFF8C8C8C),
                                         fontSize = 16.sp
                                     )
@@ -297,6 +297,22 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
                                         contentDescription = null,
                                         tint = Color(0xFF8C8C8C)
                                     )
+                                },
+                                trailingIcon = {
+                                    if (searchQuery.isNotBlank()) {
+                                        Text(
+                                            "X",
+                                            color = Color(0xFFB3B3B3),
+                                            modifier = Modifier
+                                                .padding(end = 12.dp)
+                                                .clip(CircleShape)
+                                                .clickable {
+                                                    searchQuery = ""  // clears input
+                                                    // “X” disappears automatically when text is empty
+                                                }
+                                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
                                 },
                                 colors = TextFieldDefaults.colors(
                                     focusedContainerColor = Color.Transparent,
@@ -596,8 +612,8 @@ fun ContentScreen(
                 1 -> SearchPage(
                     modifier = pageModifier,
                     showHeader = false,
-                    navController
-//                    query = searchQuery,
+                    navController,
+                    query = searchQuery
 //                    onQueryChange = { /* handled in top bar already; wire later if needed */ }
                 )
                 2 -> HighlightsPage(modifier = pageModifier, activeCode = highlightsCode)
