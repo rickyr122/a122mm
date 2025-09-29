@@ -1,5 +1,6 @@
 package com.example.a122mm
 
+import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -10,9 +11,11 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.a122mm.components.ViewMovieDetail
 import com.example.a122mm.dataclass.HomeViewModel
+import com.example.a122mm.helper.fixEncoding
 import com.example.a122mm.screen.AuthScreen
 import com.example.a122mm.screen.HomeScreen
 import com.example.a122mm.screen.LoginScreen
+import com.example.a122mm.screen.MainPlayerScreen
 import com.example.a122mm.screen.SignUpScreen
 import com.example.a122mm.screen.VideoPlayerScreen
 
@@ -70,6 +73,30 @@ fun AppNavigation(modifier: Modifier = Modifier) {
                 navController = navController
             )
         }
+
+        composable(
+            route = "playmovie/{cFlareVid}/{cFlareSrt}/{cProgress}/{mTitle}",
+            arguments = listOf(
+                navArgument("cFlareVid") { type = NavType.StringType },
+                navArgument("cFlareSrt") { type = NavType.StringType },
+                navArgument("cProgress") { type = NavType.IntType },
+                navArgument("mTitle") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val cFlareVid = backStackEntry.arguments?.getString("cFlareVid") ?: ""
+            val cFlareSrt = backStackEntry.arguments?.getString("cFlareSrt")?: ""
+            val cProgress = backStackEntry.arguments?.getInt("cProgress") ?: 0
+            val mTitle    = Uri.decode(backStackEntry.arguments?.getString("mTitle") ?: "")
+
+            MainPlayerScreen(
+                videoUrl = cFlareVid.fixEncoding(),
+                subtitleUrl = cFlareSrt.fixEncoding(),
+                progress = cProgress,
+                tTitle = mTitle.fixEncoding(),
+                navController = navController
+            )
+        }
+
     }
 }
 

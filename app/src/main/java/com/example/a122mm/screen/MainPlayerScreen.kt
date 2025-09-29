@@ -1,5 +1,7 @@
 package com.example.a122mm.screen
 
+import com.example.a122mm.helper.CustomSlider
+import com.example.a122mm.helper.formatTime
 import android.app.Activity
 import android.content.pm.ActivityInfo
 import android.net.Uri
@@ -28,8 +30,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.material.Slider
-import androidx.compose.material.SliderDefaults
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Forward10
@@ -67,18 +67,18 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
 import androidx.navigation.NavController
-import com.example.a122mm.helper.CustomSlider
-import com.example.a122mm.helper.formatTime
 import com.example.a122mm.helper.getDriveUrl
-import com.example.a122mm.helper.CustomSlider
-import com.example.a122mm.helper.formatTime
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import com.example.a122mm.helper.CustomSlider
+import com.example.a122mm.helper.formatTime
+import com.example.a122mm.helper.getCFlareUrl
 
 @Composable
-fun VideoPlayerScreen(
+fun MainPlayerScreen(
     videoUrl: String,
     subtitleUrl: String?,
+    progress: Int,
     tTitle: String,
     navController: NavController
 ) {
@@ -111,13 +111,13 @@ fun VideoPlayerScreen(
         insetsController.isAppearanceLightNavigationBars = false
     }
 
-    Log.d("VideoUrl", "Google: '${videoUrl}'")
+    //Log.d("VideoUrl", "vidURL: '${videoUrl}'")
     val exoPlayer = remember {
         ExoPlayer.Builder(context).build().apply {
-            val mediaItemBuilder = MediaItem.Builder().setUri(Uri.parse(getDriveUrl(videoUrl)))
+            val mediaItemBuilder = MediaItem.Builder().setUri(Uri.parse(getCFlareUrl(videoUrl)))
             volume = 1.0f
             subtitleUrl?.let {
-                val subtitleUri = Uri.parse(getDriveUrl(it))
+                val subtitleUri = Uri.parse(getCFlareUrl(it))
                 val subtitle = MediaItem.SubtitleConfiguration.Builder(subtitleUri)
                     .setMimeType(MimeTypes.APPLICATION_SUBRIP)
                     .setLanguage("en")
@@ -434,36 +434,4 @@ fun VideoPlayerScreen(
 
         BackHandler { navController.popBackStack() }
     }
-
-
 }
-//
-//@Composable
-//fun CustomSlider(
-//    progress: Float,
-//    onSeekChanged: (Float) -> Unit,
-//    onSeekFinished: () -> Unit,
-//    modifier: Modifier = Modifier
-//) {
-//    Slider(
-//        value = progress.coerceIn(0f, 1f),
-//        onValueChange = onSeekChanged,
-//        onValueChangeFinished = onSeekFinished,
-//        modifier = modifier
-//            .fillMaxWidth()
-//            .height(36.dp), // preserve round shape
-//        colors = SliderDefaults.colors(
-//            thumbColor = Color.Red,
-//            activeTrackColor = Color.Red,
-//            inactiveTrackColor = Color.Gray
-//        )
-//    )
-//}
-//
-//
-//fun formatTime(millis: Long): String {
-//    val totalSeconds = millis / 1000
-//    val minutes = totalSeconds / 60
-//    val seconds = totalSeconds % 60
-//    return "%02d:%02d".format(minutes, seconds)
-//}

@@ -2,6 +2,7 @@ package com.example.a122mm.components
 
 import android.content.res.Configuration
 import android.graphics.drawable.BitmapDrawable
+import android.net.Uri
 import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -61,10 +62,17 @@ import retrofit2.http.Query
 
 data class BannerResponse(
     val mId: String,
+    val mTitle: String,
     val cvrUrl: String,
     val bdropUrl: String,
     val logoUrl: String,
-    val inList: String
+    val inList: String,
+    val playId: String,
+    val cProgress: Int,
+    val cFlareVid: String,
+    val cFlareSrt: String,
+    val gDriveVid: String,
+    val gDriveSrt: String
 )
 
 interface ApiService {
@@ -121,10 +129,17 @@ fun ViewBanner(
         if (cachedJson != null && !expired) {
             val cachedBanner = BannerResponse(
                 mId = cachedJson.getString("mId"),
+                mTitle = cachedJson.getString("mTitle"),
                 cvrUrl = cachedJson.getString("cvrUrl"),
                 bdropUrl = cachedJson.getString("bdropUrl"),
                 logoUrl = cachedJson.getString("logoUrl"),
-                inList = if (cachedJson.has("inList")) cachedJson.getString("inList") else "0"
+                inList = if (cachedJson.has("inList")) cachedJson.getString("inList") else "0",
+                playId = cachedJson.getString("playId"),
+                cProgress = cachedJson.getInt("cProgress"),
+                cFlareVid = cachedJson.getString("cFlareVid"),
+                cFlareSrt = cachedJson.getString("cFlareSrt"),
+                gDriveVid = cachedJson.getString("gDriveVid"),
+                gDriveSrt = cachedJson.getString("gDriveSrt")
             )
             bannerData = cachedBanner
             //isInList = cachedBanner.inList == "1"
@@ -158,10 +173,17 @@ fun ViewBanner(
                     // Save to SharedPreferences
                     val bannerJson = org.json.JSONObject().apply {
                         put("mId", banner.mId)
+                        put("mTitle", banner.mTitle)
                         put("cvrUrl", banner.cvrUrl)
                         put("bdropUrl", banner.bdropUrl)
                         put("logoUrl", banner.logoUrl)
                         put("inList", banner.inList)
+                        put("playId", banner.playId)
+                        put("cProgress", banner.cProgress)
+                        put("cFlareVid", banner.cFlareVid)
+                        put("cFlareSrt", banner.cFlareSrt)
+                        put("gDriveVid", banner.gDriveVid)
+                        put("gDriveSrt", banner.gDriveSrt)
                     }
                     BannerStorage.saveBanner(context, type, bannerJson.toString(), it.value.toInt())
                 }
@@ -263,7 +285,15 @@ fun ViewBanner(
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
                                 Button(
-                                    onClick = { /* Play Clicked */ },
+                                    onClick = {
+                                        val encodedVid   = Uri.encode(banner.cFlareVid, "")
+                                        val encodedSrt   = Uri.encode(banner.cFlareSrt ?: "", "")
+                                        val encodedTitle = Uri.encode(banner.mTitle, "")
+
+                                        navController.navigate(
+                                            "playmovie/$encodedVid/$encodedSrt/${banner.cProgress}/$encodedTitle"
+                                        )
+                                    },
                                     modifier = Modifier
                                         .weight(1f)
                                         .fillMaxHeight(),
@@ -295,20 +325,33 @@ fun ViewBanner(
                                                     // ✅ Update cached inList value
                                                     val bannerJson = org.json.JSONObject().apply {
                                                         put("mId", banner.mId)
+                                                        put("mTitle", banner.mTitle)
                                                         put("cvrUrl", banner.cvrUrl)
                                                         put("bdropUrl", banner.bdropUrl)
                                                         put("logoUrl", banner.logoUrl)
                                                         put("inList", newInListValue)
+                                                        put("cProgress", banner.cProgress)
+                                                        put("cFlareVid", banner.cFlareVid)
+                                                        put("cFlareSrt", banner.cFlareSrt)
+                                                        put("gDriveVid", banner.gDriveVid)
+                                                        put("gDriveSrt", banner.gDriveSrt)
                                                     }
                                                     BannerStorage.saveBanner(context, type, bannerJson.toString(), localDominantColor.value.toInt())
 
                                                     withContext(Dispatchers.Main) {
                                                         bannerData = BannerResponse(
                                                             mId = banner.mId,
+                                                            mTitle= banner.mTitle,
                                                             cvrUrl = banner.cvrUrl,
                                                             bdropUrl = banner.bdropUrl,
                                                             logoUrl = banner.logoUrl,
-                                                            inList = newInListValue
+                                                            inList = newInListValue,
+                                                            playId = banner.playId,
+                                                            cProgress = banner.cProgress,
+                                                            cFlareVid = banner.cFlareVid,
+                                                            cFlareSrt = banner.cFlareSrt,
+                                                            gDriveVid = banner.gDriveVid,
+                                                            gDriveSrt = banner.gDriveSrt
                                                         )
                                                         onMyListChanged() // notify HomePage to refresh ViewContent
 

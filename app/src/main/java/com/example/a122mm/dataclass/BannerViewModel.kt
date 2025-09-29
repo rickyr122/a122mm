@@ -34,10 +34,17 @@ class BannerViewModel(
             if (cachedJson != null && !expired) {
                 bannerData = BannerResponse(
                     mId = cachedJson.getString("mId"),
+                    mTitle = cachedJson.getString("mTitle"),
                     cvrUrl = cachedJson.getString("cvrUrl"),
                     bdropUrl = cachedJson.getString("bdropUrl"),
                     logoUrl = cachedJson.getString("logoUrl"),
-                    inList = if (cachedJson.has("inList")) cachedJson.getString("inList") else "0"
+                    inList = if (cachedJson.has("inList")) cachedJson.getString("inList") else "0",
+                    playId = cachedJson.getString("playId"),
+                    cProgress = cachedJson.getInt("cProgress"),
+                    cFlareVid = cachedJson.getString("cFlareVid"),
+                    cFlareSrt = cachedJson.getString("cFlareSrt"),
+                    gDriveVid = cachedJson.getString("gDriveVid"),
+                    gDriveSrt = cachedJson.getString("gDriveSrt")
                 )
                 return@launch
             }
