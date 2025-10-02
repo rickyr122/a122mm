@@ -4,6 +4,7 @@ import com.example.a122mm.helper.CustomSlider
 import com.example.a122mm.helper.formatTime
 import android.app.Activity
 import android.content.pm.ActivityInfo
+import android.content.res.Configuration
 import android.media.audiofx.DynamicsProcessing
 import android.media.audiofx.Equalizer
 import android.media.audiofx.LoudnessEnhancer
@@ -26,20 +27,27 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.Replay10
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -58,6 +66,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
@@ -277,13 +286,10 @@ fun MainPlayerScreen(
     }
 
     val isControlsVisible = remember { mutableStateOf(false) }
-    val interactionTrigger = remember { mutableStateOf(0) }
-    val hasUserInteracted = remember { mutableStateOf(false) }
 
-// Only show/hide controls *after* first tap
-    if (hasUserInteracted.value) {
-        LaunchedEffect(interactionTrigger.value) {
-            isControlsVisible.value = true
+// Auto-hide after 4s of inactivity
+    LaunchedEffect(isControlsVisible.value) {
+        if (isControlsVisible.value) {
             delay(4000)
             isControlsVisible.value = false
         }
@@ -297,10 +303,7 @@ fun MainPlayerScreen(
                 indication = null,             // 👈 No ripple
                 interactionSource = remember { MutableInteractionSource() } // 👈 No pressed state
             ) {
-                if (!hasUserInteracted.value) {
-                    hasUserInteracted.value = true
-                }
-                interactionTrigger.value++
+                isControlsVisible.value = !isControlsVisible.value
             }
 
     ) {
@@ -498,52 +501,171 @@ fun MainPlayerScreen(
             }
         }
 
+        val configuration = LocalConfiguration.current
+        val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        val isTablet =  configuration.smallestScreenWidthDp >= 600
+        val bottomLift = if (isTablet) 54.dp else 12.dp   // raise controls higher on tablet
 
-        // 🔽 Bottom: slider + timer
+        // 🔽 Bottom: slider + timer (+ buttons under seekbar) — ALWAYS at screen bottom
         AnimatedVisibility(
             visible = isControlsVisible.value,
             enter = fadeIn() + slideInVertically(initialOffsetY = { 100 }),
             exit = fadeOut() + slideOutVertically(targetOffsetY = { 100 })
         ) {
             Box(Modifier.fillMaxSize()) {
-                Row(
+
+                // We pin the whole cluster to the screen bottom and respect nav-bar insets
+                Column(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
-                        .padding(start = 64.dp, end = 64.dp, bottom = 24.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.navigationBars) // ⬅️ avoid floating above bottom on tablets
+                        .padding(start = 64.dp, end = 64.dp, bottom = bottomLift), // small visual gap
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    CustomSlider(
-                        progress = seekPosition.value,
-                        onSeekChanged = {
-                            isSeeking.value = true
-                            seekPosition.value = it
-                        },
-                        onSeekFinished = {
-                            val newPos = (seekPosition.value * duration.value).toLong()
-                            exoPlayer.seekTo(newPos)
-                            currentPosition.value = newPos
-                            isSeeking.value = false
-                        },
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(32.dp)
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    val totalDuration = exoPlayer.duration.coerceAtLeast(0L) // total duration
-                    val position = currentPosition.value               // elapsed position
-                    val remaining = (totalDuration - position).coerceAtLeast(0L)
+                    // Row 1: [ seekbar (weight=1) ]  [ 12.dp ]  [ remaining time ]
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        // Left: seekbar (defines the width we’ll align buttons to)
+                        CustomSlider(
+                            progress = seekPosition.value,
+                            onSeekChanged = {
+                                isSeeking.value = true
+                                seekPosition.value = it
+                            },
+                            onSeekFinished = {
+                                val newPos = (seekPosition.value * duration.value).toLong()
+                                exoPlayer.seekTo(newPos)
+                                currentPosition.value = newPos
+                                isSeeking.value = false
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(32.dp)
+                        )
 
-                    Text(
-                        text = formatTime(remaining),
-                        color = Color.White,
-                        fontSize = 14.sp,
-                        modifier = Modifier.align(Alignment.CenterVertically)
-                    )
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        // Right: remaining time
+                        val totalDuration = exoPlayer.duration.coerceAtLeast(0L)
+                        val position = currentPosition.value
+                        val remaining = (totalDuration - position).coerceAtLeast(0L)
+
+                        Text(
+                            text = formatTime(remaining),
+                            color = Color.White,
+                            fontSize = 14.sp
+                        )
+                    }
+
+                    val menuIconSz = if (isTablet) 32.dp else 20.dp
+                    val menuTextSz = if (isTablet) 18.sp else 14.sp
+
+                    val spacerHeight = if (isTablet) 24.dp else 8.dp
+                    Spacer(Modifier.height(spacerHeight))
+
+                    // Row 2: Buttons — constrained to the SAME left width as the seekbar
+                    val hasEpisodes = remember(videoUrl) { videoUrl.contains("Channel-") }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Left area: same width as the seekbar (weight=1)
+                        if (hasEpisodes) {
+                            // 3 buttons spaced evenly across seekbar width
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                horizontalArrangement = Arrangement.SpaceEvenly,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Episodes
+                                Row(
+                                    modifier = Modifier.clickable { /* TODO: open episodes */ },
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.PlaylistPlay,
+                                        contentDescription = "Episodes",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(menuIconSz)
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Episodes", color = Color.White, fontSize = menuTextSz)
+                                }
+
+                                // Caption
+                                Row(
+                                    modifier = Modifier.clickable { /* TODO: captions */ },
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Subtitles,
+                                        contentDescription = "Subtitles",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(menuIconSz)
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Subtitles", color = Color.White, fontSize = menuTextSz)
+                                }
+
+                                // Next Episode
+                                Row(
+                                    modifier = Modifier.clickable { /* TODO: next episode */ },
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.SkipNext,
+                                        contentDescription = "Next Episode",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(menuIconSz)
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Next Episode", color = Color.White, fontSize = menuTextSz)
+                                }
+                            }
+                        } else {
+                            // Only Caption → align to the RIGHT end of the seekbar
+                            Row(
+                                modifier = Modifier
+                                    .weight(1f)                 // match seekbar width
+                                    .fillMaxWidth()
+                                    .padding(end = 32.dp),
+                                horizontalArrangement = Arrangement.End,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    modifier = Modifier.clickable { /* TODO: captions */ },
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Subtitles,
+                                        contentDescription = "Subtitles",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(menuIconSz)
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Subtitles", color = Color.White, fontSize = menuTextSz)
+                                }
+                            }
+                        }
+
+                        // Right area mirrors Row 1’s trailing space:
+                        Spacer(modifier = Modifier.width(12.dp))
+                        // Invisible timer to reserve identical width as Row 1's time text
+                        Text(
+                            text = formatTime(
+                                exoPlayer.duration.coerceAtLeast(0L) - currentPosition.value
+                            ),
+                            color = Color.Transparent,
+                            fontSize = 14.sp
+                        )
+                    }
                 }
             }
         }
-
         BackHandler { navController.popBackStack() }
     }
 }
