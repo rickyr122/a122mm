@@ -2,6 +2,7 @@ package com.example.a122mm.components
 
 import android.app.Activity
 import android.content.res.Configuration
+import android.net.Uri
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
@@ -133,7 +134,14 @@ data class MovieDetail(
     val inList: String,
     val hasCollection: String,
     val hasTrailer: String,
-    val hasRated: Int
+    val hasRated: Int,
+    val playId: String,
+    val pTitle: String,
+    val cProgress: Int,
+    val cFlareVid: String,
+    val cFlareSrt: String,
+    val gDriveVid: String,
+    val gDriveSrt: String
 )
 
 // --- Retrofit interface
@@ -612,7 +620,18 @@ fun MovieDetailContent(
                         val buttonLabel = if (movie.c_remaining > 0) "Resume" else "Play"
 
                         Button(
-                            onClick = { /* TODO: Play */ },
+                            onClick = {
+                                        val encodedVid   = Uri.encode(movie.cFlareVid ?: "", "").replace("%60","%27")
+                                        val encodedSrt   = Uri.encode(movie.cFlareSrt ?: "", "").replace("%60","%27")
+
+                                        val vTitle = if (movie.pTitle == "") movie.m_title else movie.pTitle
+                                        val encodedTitle = Uri.encode(vTitle, "")
+
+                                        Log.d("encodedVid", "encodedVid: '${encodedVid}'")
+                                        navController.navigate(
+                                            "playmovie/$encodedVid/$encodedSrt/${movie.cProgress}/$encodedTitle"
+                                        )
+                                      },
                             shape = RoundedCornerShape(3.dp),
                             modifier = Modifier.fillMaxWidth(),
                             colors = ButtonDefaults.buttonColors(containerColor = Color.White)

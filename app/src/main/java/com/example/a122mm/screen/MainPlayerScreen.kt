@@ -69,6 +69,7 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
@@ -91,6 +92,10 @@ fun MainPlayerScreen(
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
+
+    val externalSubUrl = subtitleUrl?.trim().orEmpty()
+    val hasExternalSrt = externalSubUrl.isNotEmpty()
+
 
     DisposableEffect(Unit) {
 //        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
@@ -118,16 +123,21 @@ fun MainPlayerScreen(
         insetsController.isAppearanceLightNavigationBars = false
     }
 
-    val trackSelector = remember {
+    val trackSelector = remember(hasExternalSrt) {
         DefaultTrackSelector(context).apply {
             setParameters(
-                buildUponParameters()
-                    .setPreferredAudioLanguage("en")
-                    .setPreferredAudioMimeTypes(
-                        MimeTypes.AUDIO_E_AC3,  // Dolby Digital Plus
-                        MimeTypes.AUDIO_AC3,    // Dolby Digital
-                        MimeTypes.AUDIO_AAC
-                    )
+                buildUponParameters().apply {
+                    // your audio prefs can stay here (E-AC3/AC3/AAC) if you had them
+                    if (hasExternalSrt) {
+                        // We will attach our own SRT, do NOT auto-pick embedded/forced
+                        setSelectUndeterminedTextLanguage(false)
+                        setPreferredTextLanguage(null)
+                    } else {
+                        // No external → allow embedded/forced selection
+                        setSelectUndeterminedTextLanguage(true)
+                        setPreferredTextLanguage("en") // or null if you don’t want a lang bias
+                    }
+                }
             )
         }
     }
@@ -145,7 +155,7 @@ fun MainPlayerScreen(
             .build()
     }
 
-    //Log.d("VideoUrl", "vidURL: '${videoUrl}'")
+    Log.d("VideoUrl", "vidURL: '${videoUrl}'")
     // ---- UPDATED: build Exo with the renderersFactory + trackSelector ----
     val exoPlayer = remember {
         ExoPlayer.Builder(context, renderersFactory)
@@ -154,22 +164,27 @@ fun MainPlayerScreen(
                 setAudioAttributes(audioAttrs, /* handleAudioFocus = */ true)
                 volume = 1.0f
 
-                val mediaItemBuilder =
-                    MediaItem.Builder().setUri(Uri.parse(getCFlareUrl(videoUrl)))
+                val startMs = (progress.coerceAtLeast(0)).toLong() * 1_000L - 5_000L
 
-                subtitleUrl?.let {
-                    val subtitleUri = Uri.parse(getCFlareUrl(it))
-                    val subtitleCfg = MediaItem.SubtitleConfiguration.Builder(subtitleUri)
+                val mediaItemBuilder = MediaItem.Builder()
+                    .setUri(Uri.parse(getCFlareUrl(videoUrl)))
+
+                if (hasExternalSrt) {
+                    val subCfg = MediaItem.SubtitleConfiguration.Builder(
+                        Uri.parse(getCFlareUrl(externalSubUrl))
+                    )
                         .setMimeType(MimeTypes.APPLICATION_SUBRIP)
                         .setLanguage("en")
-                        .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+                        .setSelectionFlags(C.SELECTION_FLAG_DEFAULT) // prefer THIS subtitle
                         .build()
-                    mediaItemBuilder.setSubtitleConfigurations(listOf(subtitleCfg))
+                    mediaItemBuilder.setSubtitleConfigurations(listOf(subCfg))
                 }
 
-                setMediaItem(mediaItemBuilder.build())
+                val mediaItem = mediaItemBuilder.build()
+                setMediaItem(mediaItem, startMs)
                 prepare()
                 playWhenReady = true
+
             }
     }
 
@@ -210,8 +225,30 @@ fun MainPlayerScreen(
             if (!hasSupportedAudio) {
                 Log.w("AUDIO", "No supported audio tracks (likely DD+ only, no decoder).")
             }
+
+            if (hasExternalSrt) {
+                // Force-pick the external SRT (application/x-subrip) and ignore embedded ones
+                val textGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_TEXT }
+                for (g in textGroups) {
+                    for (i in 0 until g.length) {
+                        val f = g.getTrackFormat(i)
+                        if (f.sampleMimeType == MimeTypes.APPLICATION_SUBRIP) {
+                            val override = TrackSelectionOverride(g.mediaTrackGroup, listOf(i))
+                            val params = exoPlayer.trackSelectionParameters
+                                .buildUpon()
+                                .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                                .addOverride(override)
+                                .build()
+                            exoPlayer.trackSelectionParameters = params
+                            return
+                        }
+                    }
+                }
+            }
         }
-    })
+
+    }
+    )
 
     val isLoading = remember { mutableStateOf(true) }
     val isPlayingState = remember { mutableStateOf(exoPlayer.isPlaying) }
@@ -493,8 +530,12 @@ fun MainPlayerScreen(
                             .height(32.dp)
                     )
                     Spacer(modifier = Modifier.width(12.dp))
+                    val totalDuration = exoPlayer.duration.coerceAtLeast(0L) // total duration
+                    val position = currentPosition.value               // elapsed position
+                    val remaining = (totalDuration - position).coerceAtLeast(0L)
+
                     Text(
-                        text = formatTime(currentPosition.value),
+                        text = formatTime(remaining),
                         color = Color.White,
                         fontSize = 14.sp,
                         modifier = Modifier.align(Alignment.CenterVertically)
