@@ -2,7 +2,6 @@ package com.example.a122mm.components
 
 import android.content.res.Configuration
 import android.graphics.drawable.BitmapDrawable
-import android.net.Uri
 import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -284,14 +283,11 @@ fun ViewBanner(
                                     .height(36.dp),
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
+                                Log.d("Banner Id check", "mId -> ${banner.playId}")
                                 Button(
                                     onClick = {
-                                        val encodedVid   = Uri.encode(banner.cFlareVid, "")
-                                        val encodedSrt   = Uri.encode(banner.cFlareSrt ?: "", "")
-                                        val encodedTitle = Uri.encode(banner.mTitle, "")
-
                                         navController.navigate(
-                                            "playmovie/$encodedVid/$encodedSrt/${banner.cProgress}/$encodedTitle"
+                                            "playmovie/${banner.playId}"
                                         )
                                     },
                                     modifier = Modifier

@@ -51,6 +51,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -69,6 +70,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -82,26 +85,87 @@ import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
 import androidx.navigation.NavController
+import com.example.a122mm.components.ApiServiceRecent
+import com.example.a122mm.components.MovieDetail
+import com.example.a122mm.components.RecentWatchResponse
+import com.example.a122mm.dataclass.ApiClient
+import com.example.a122mm.dataclass.NetworkModule
 import com.example.a122mm.helper.CustomSlider
 import com.example.a122mm.helper.formatTime
 import com.example.a122mm.helper.getCFlareUrl
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import retrofit2.http.GET
+import retrofit2.http.Query
+
+data class VideoDetailsResponse(
+    val gId: String,
+    val mId: String,
+    val mTitle: String,
+    val cFlareVid: String,
+    val cFlareSrt: String,
+    val cProgress: Int,
+    val gDriveVid: String,
+    val gDriveSrt: String,
+    val sId: Int,
+    val tvOrder: Int,
+    val nextTvId: String,
+    val crTime: Int
+)
+
+
+interface ApiVideoDetails {
+    @GET("getvideodetails")
+    suspend fun getVideoDetails(
+        @Query("code") code: String
+    ): VideoDetailsResponse
+}
+
+// ----- ViewModel: wiring & API calls -----
+class RecentWatchViewModel : ViewModel() {
+    private val apiService = ApiClient.create(ApiVideoDetails::class.java)
+
+    private val _item = mutableStateOf<VideoDetailsResponse?>(null)
+    val item: State<VideoDetailsResponse?> = _item
+
+    fun fetchItemByCode(code: String) {
+        viewModelScope.launch {
+            try {
+                _item.value = apiService.getVideoDetails(code)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _item.value = null
+            }
+        }
+    }
+}
 
 @Composable
 fun MainPlayerScreen(
-    videoUrl: String,
-    subtitleUrl: String?,
-    progress: Int,
-    tTitle: String,
+    videoCode: String,
     navController: NavController
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
 
-    val externalSubUrl = subtitleUrl?.trim().orEmpty()
-    val hasExternalSrt = externalSubUrl.isNotEmpty()
+    // ──────────────────────────
+    // Fetch video details by code
+    // ──────────────────────────
+    var vData by remember { mutableStateOf<VideoDetailsResponse?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val api: ApiVideoDetails = ApiClient.create(ApiVideoDetails::class.java)
 
+    LaunchedEffect(videoCode) {
+        try {
+            vData = api.getVideoDetails(videoCode)
+            error = null
+        } catch (e: Exception) {
+            error = e.message
+            vData = null
+        }
+    }
+
+    // Orientation & system UI (unchanged)
     DisposableEffect(Unit) {
         activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         activity?.window?.decorView?.systemUiVisibility =
@@ -122,23 +186,45 @@ fun MainPlayerScreen(
         val window = (context as Activity).window
         window.statusBarColor = android.graphics.Color.TRANSPARENT
         window.navigationBarColor = android.graphics.Color.BLACK
-        val insetsController = WindowCompat.getInsetsController(window, view)
-        insetsController.isAppearanceLightStatusBars = false
-        insetsController.isAppearanceLightNavigationBars = false
+        WindowCompat.getInsetsController(window, view).apply {
+            isAppearanceLightStatusBars = false
+            isAppearanceLightNavigationBars = false
+        }
     }
 
-    // TrackSelector: external SRT -> do NOT auto-pick embedded; otherwise allow embedded
+    // Loading / error states (simple)
+    if (error != null) {
+        Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
+            Text("Error: $error", color = Color.Red)
+        }
+        return
+    }
+    if (vData == null) {
+        Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(color = Color.White, strokeWidth = 4.dp)
+        }
+        return
+    }
+
+    // Map API → local vars (replaces previous parameters)
+    val videoUrl = vData!!.cFlareVid
+    val subtitleUrl = vData!!.cFlareSrt
+    val progress = vData!!.cProgress
+    val tTitle = vData!!.mTitle
+
+    val externalSubUrl = subtitleUrl.trim()
+    val hasExternalSrt = externalSubUrl.isNotEmpty()
+
+    // TrackSelector respects your external SRT rule
     val trackSelector = remember(hasExternalSrt) {
         DefaultTrackSelector(context).apply {
             setParameters(
                 buildUponParameters().apply {
                     if (hasExternalSrt) {
-                        // 1) External SRT present → don't auto-pick any embedded text
                         setSelectUndeterminedTextLanguage(false)
                         setPreferredTextLanguage(null)
-                        setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true) // disable text until we force-select ours
+                        setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
                     } else {
-                        // 2) No external → allow Exo to pick embedded (default/forced/undetermined)
                         setSelectUndeterminedTextLanguage(true)
                         setPreferredTextLanguage(null)
                         setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
@@ -161,17 +247,18 @@ fun MainPlayerScreen(
             .build()
     }
 
-    Log.d("VideoUrl", "vidURL: '$videoUrl'")
-
-    // Build player + MediaItem (attach external SRT with stable ID)
-    val exoPlayer = remember {
+    // Build ExoPlayer AFTER data is ready; re-build if URL/progress or SRT presence changes
+    val exoPlayer = remember(videoUrl, progress, hasExternalSrt) {
         ExoPlayer.Builder(context, renderersFactory)
             .setTrackSelector(trackSelector)
             .build().apply {
-                setAudioAttributes(audioAttrs, /* handleAudioFocus = */ true)
+                setAudioAttributes(audioAttrs, true)
                 volume = 1.0f
 
                 val startMs = (progress.coerceAtLeast(0)).toLong() * 1_000L - 5_000L
+
+                val resolvedVideoUrl = getCFlareUrl(videoUrl)
+                Log.d("MainPlayer", "Video URL -> $resolvedVideoUrl  (raw: $videoUrl)")
 
                 val mediaItemBuilder = MediaItem.Builder()
                     .setUri(Uri.parse(getCFlareUrl(videoUrl)))
@@ -181,10 +268,10 @@ fun MainPlayerScreen(
                         Uri.parse(getCFlareUrl(externalSubUrl))
                     )
                         .setMimeType(MimeTypes.APPLICATION_SUBRIP)
-                        .setLanguage("en")        // optional
-                        .setId("ext_srt")         // stable ID to target later
-                        .setLabel("External SRT") // helpful label
-                        .setSelectionFlags(0)     // don't rely on DEFAULT flag
+                        .setLanguage("en")
+                        .setId("ext_srt")
+                        .setLabel("External SRT")
+                        .setSelectionFlags(0)
                         .build()
                     mediaItemBuilder.setSubtitleConfigurations(listOf(subCfg))
                 }
@@ -192,7 +279,6 @@ fun MainPlayerScreen(
                 val mediaItem = mediaItemBuilder.build()
                 setMediaItem(mediaItem, startMs)
 
-                // If we have external SRT, keep text disabled BEFORE prepare() so embedded can’t win
                 if (hasExternalSrt) {
                     trackSelectionParameters = trackSelectionParameters
                         .buildUpon()
@@ -206,10 +292,7 @@ fun MainPlayerScreen(
             }
     }
 
-    LaunchedEffect(exoPlayer.audioSessionId) {
-        // place to (re)create FX if needed
-    }
-
+    LaunchedEffect(exoPlayer.audioSessionId) { /* hook for audio FX if needed */ }
     RememberAndAttachAudioEffects(exoPlayer)
 
     val currentPosition = remember { mutableStateOf(0L) }
@@ -225,20 +308,18 @@ fun MainPlayerScreen(
         while (true) {
             if (!isSeeking.value) {
                 currentPosition.value = exoPlayer.currentPosition
-                seekPosition.value =
-                    currentPosition.value.toFloat() / duration.value.toFloat()
+                seekPosition.value = currentPosition.value.toFloat() / duration.value.toFloat()
             }
             delay(200)
         }
     }
 
-    // Subtitle selection logic: 1) external SRT; 2) else best embedded; 3) else none
+    // Keep your subtitle selection listener logic
     exoPlayer.addListener(object : Player.Listener {
         override fun onTracksChanged(tracks: Tracks) {
             val textGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_TEXT }
 
             if (hasExternalSrt) {
-                // Find our attached external SRT by ID/label + MIME
                 for ((gIdx, g) in textGroups.withIndex()) {
                     for (i in 0 until g.length) {
                         if (!g.isTrackSupported(i)) continue
@@ -249,23 +330,20 @@ fun MainPlayerScreen(
                             val override = TrackSelectionOverride(g.mediaTrackGroup, listOf(i))
                             exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
                                 .buildUpon()
-                                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false) // re-enable text
+                                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
                                 .clearOverridesOfType(C.TRACK_TYPE_TEXT)
-                                .addOverride(override) // force our external
+                                .addOverride(override)
                                 .build()
                             return
                         }
                     }
                 }
-                // If not visible yet, do nothing; callback will fire again
                 return
             }
 
-            // No external SRT → try to select embedded (Default > Forced > Any). If none, leave off.
             if (textGroups.isEmpty()) return
 
             data class Candidate(val g: Int, val t: Int, val score: Int)
-
             val candidates = buildList {
                 textGroups.forEachIndexed { gIdx, g ->
                     for (i in 0 until g.length) {
@@ -313,14 +391,11 @@ fun MainPlayerScreen(
                     Player.STATE_ENDED -> navController.popBackStack()
                 }
             }
-
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 isPlayingState.value = isPlaying
             }
         }
-
         exoPlayer.addListener(listener)
-
         onDispose {
             exoPlayer.removeListener(listener)
             exoPlayer.release()
@@ -336,6 +411,9 @@ fun MainPlayerScreen(
         }
     }
 
+    // ──────────────────────────
+    // UI (kept intact; just binds to variables from vData)
+    // ──────────────────────────
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -343,17 +421,15 @@ fun MainPlayerScreen(
             .clickable(
                 indication = null,
                 interactionSource = remember { MutableInteractionSource() }
-            ) {
-                isControlsVisible.value = !isControlsVisible.value
-            }
+            ) { isControlsVisible.value = !isControlsVisible.value }
     ) {
+        // Player surface
         AndroidView(
             factory = {
                 PlayerView(it).apply {
                     player = exoPlayer
                     useController = false
                     setShutterBackgroundColor(android.graphics.Color.BLACK)
-
                     subtitleView?.apply {
                         setStyle(
                             CaptionStyleCompat(
@@ -375,15 +451,13 @@ fun MainPlayerScreen(
 
         if (isLoading.value) {
             CircularProgressIndicator(
-                modifier = Modifier
-                    .size(48.dp)
-                    .align(Alignment.Center),
+                modifier = Modifier.size(48.dp).align(Alignment.Center),
                 color = Color.White,
                 strokeWidth = 4.dp
             )
         }
 
-        // Title
+        // Title (now from API)
         AnimatedVisibility(
             visible = isControlsVisible.value,
             enter = fadeIn() + slideInVertically(initialOffsetY = { -100 }),
@@ -397,11 +471,7 @@ fun MainPlayerScreen(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
                         .padding(top = 12.dp)
-                        .shadow(
-                            elevation = 4.dp,
-                            spotColor = Color.Black,
-                            ambientColor = Color.Black
-                        )
+                        .shadow(4.dp, spotColor = Color.Black, ambientColor = Color.Black)
                 )
             }
         }
@@ -415,46 +485,24 @@ fun MainPlayerScreen(
             Box(Modifier.fillMaxSize()) {
                 IconButton(
                     onClick = { navController.popBackStack() },
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(16.dp)
+                    modifier = Modifier.align(Alignment.TopStart).padding(16.dp)
                 ) {
-                    Icon(
-                        Icons.Default.ArrowBack,
-                        contentDescription = "Back",
-                        tint = Color.White,
-                        modifier = Modifier.size(64.dp)
-                    )
+                    Icon(Icons.Default.ArrowBack, contentDescription = "Back",
+                        tint = Color.White, modifier = Modifier.size(64.dp))
                 }
             }
         }
 
         val coroutineScope = rememberCoroutineScope()
-
         var isPlayPressed by remember { mutableStateOf(false) }
-        val playScale by animateFloatAsState(
-            targetValue = if (isPlayPressed) 1.2f else 1f,
-            label = "playScale"
-        )
-
+        val playScale by animateFloatAsState(if (isPlayPressed) 1.2f else 1f, label = "playScale")
         var isReplayPressed by remember { mutableStateOf(false) }
-        val replayScale by animateFloatAsState(
-            targetValue = if (isReplayPressed) 1.2f else 1f,
-            label = "replayScale"
-        )
-
+        val replayScale by animateFloatAsState(if (isReplayPressed) 1.2f else 1f, label = "replayScale")
         var isForwardPressed by remember { mutableStateOf(false) }
-        val forwardScale by animateFloatAsState(
-            targetValue = if (isForwardPressed) 1.2f else 1f,
-            label = "forwardScale"
-        )
+        val forwardScale by animateFloatAsState(if (isForwardPressed) 1.2f else 1f, label = "forwardScale")
 
         // Center controls
-        AnimatedVisibility(
-            visible = isControlsVisible.value,
-            enter = fadeIn() + scaleIn(),
-            exit = fadeOut() + scaleOut()
-        ) {
+        AnimatedVisibility(visible = isControlsVisible.value, enter = fadeIn() + scaleIn(), exit = fadeOut() + scaleOut()) {
             Box(Modifier.fillMaxSize()) {
                 Row(
                     modifier = Modifier.align(Alignment.Center),
@@ -466,21 +514,11 @@ fun MainPlayerScreen(
                         onClick = {
                             isReplayPressed = true
                             exoPlayer.seekBack()
-                            coroutineScope.launch {
-                                delay(100)
-                                isReplayPressed = false
-                            }
+                            coroutineScope.launch { delay(100); isReplayPressed = false }
                         },
-                        modifier = Modifier
-                            .size(64.dp)
-                            .scale(replayScale)
+                        modifier = Modifier.size(64.dp).scale(replayScale)
                     ) {
-                        Icon(
-                            Icons.Default.Replay10,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.fillMaxSize()
-                        )
+                        Icon(Icons.Default.Replay10, contentDescription = null, tint = Color.White, modifier = Modifier.fillMaxSize())
                     }
 
                     Spacer(Modifier.width(96.dp))
@@ -492,23 +530,15 @@ fun MainPlayerScreen(
                             val newState = !exoPlayer.isPlaying
                             exoPlayer.playWhenReady = newState
                             isPlayingState.value = newState
-                            coroutineScope.launch {
-                                delay(100)
-                                isPlayPressed = false
-                            }
+                            coroutineScope.launch { delay(100); isPlayPressed = false }
                         },
-                        modifier = Modifier
-                            .size(96.dp)
-                            .scale(playScale)
-                            .padding(horizontal = 12.dp)
+                        modifier = Modifier.size(96.dp).scale(playScale).padding(horizontal = 12.dp)
                     ) {
                         Icon(
                             imageVector = if (isPlayingState.value) Icons.Default.Pause else Icons.Default.PlayArrow,
                             contentDescription = null,
                             tint = Color.White,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .scale(1.2f)
+                            modifier = Modifier.fillMaxSize().scale(1.2f)
                         )
                     }
 
@@ -519,21 +549,11 @@ fun MainPlayerScreen(
                         onClick = {
                             isForwardPressed = true
                             exoPlayer.seekForward()
-                            coroutineScope.launch {
-                                delay(100)
-                                isForwardPressed = false
-                            }
+                            coroutineScope.launch { delay(100); isForwardPressed = false }
                         },
-                        modifier = Modifier
-                            .size(64.dp)
-                            .scale(forwardScale)
+                        modifier = Modifier.size(64.dp).scale(forwardScale)
                     ) {
-                        Icon(
-                            Icons.Default.Forward10,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.fillMaxSize()
-                        )
+                        Icon(Icons.Default.Forward10, contentDescription = null, tint = Color.White, modifier = Modifier.fillMaxSize())
                     }
                 }
             }
@@ -543,7 +563,7 @@ fun MainPlayerScreen(
         val isTablet = configuration.smallestScreenWidthDp >= 600
         val bottomLift = if (isTablet) 54.dp else 12.dp
 
-        // Bottom: slider + timer (+ buttons under seekbar) — always at screen bottom
+        // Bottom: slider + time + (buttons)
         AnimatedVisibility(
             visible = isControlsVisible.value,
             enter = fadeIn() + slideInVertically(initialOffsetY = { 100 }),
@@ -558,11 +578,8 @@ fun MainPlayerScreen(
                         .padding(start = 64.dp, end = 64.dp, bottom = bottomLift),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Row 1: [ seekbar (weight=1) ] [ 12.dp ] [ remaining time ]
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
+                    // Row 1: Seek + remaining
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                         CustomSlider(
                             progress = seekPosition.value,
                             onSeekChanged = {
@@ -575,9 +592,7 @@ fun MainPlayerScreen(
                                 currentPosition.value = newPos
                                 isSeeking.value = false
                             },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(32.dp)
+                            modifier = Modifier.weight(1f).height(32.dp)
                         )
 
                         Spacer(modifier = Modifier.width(12.dp))
@@ -585,12 +600,7 @@ fun MainPlayerScreen(
                         val totalDuration = exoPlayer.duration.coerceAtLeast(0L)
                         val position = currentPosition.value
                         val remaining = (totalDuration - position).coerceAtLeast(0L)
-
-                        Text(
-                            text = formatTime(remaining),
-                            color = Color.White,
-                            fontSize = 14.sp
-                        )
+                        Text(text = formatTime(remaining), color = Color.White, fontSize = 14.sp)
                     }
 
                     val menuIconSz = if (isTablet) 32.dp else 20.dp
@@ -598,78 +608,50 @@ fun MainPlayerScreen(
                     val spacerHeight = if (isTablet) 24.dp else 8.dp
                     Spacer(Modifier.height(spacerHeight))
 
-                    // Row 2: Buttons — constrained to same left width as seekbar
+                    // Row 2: Buttons (Episodes/Subtitles/Next) — same logic; detect episodes via cFlareVid
                     val hasEpisodes = remember(videoUrl) { videoUrl.contains("Channel-") }
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         if (hasEpisodes) {
                             Row(
                                 modifier = Modifier.weight(1f),
                                 horizontalArrangement = Arrangement.SpaceEvenly,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(
-                                    modifier = Modifier.clickable { /* TODO: Episodes */ },
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(Icons.Filled.PlaylistPlay, contentDescription = "Episodes",
-                                        tint = Color.White, modifier = Modifier.size(menuIconSz))
+                                Row(modifier = Modifier.clickable { /* TODO: Episodes */ }, verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Filled.PlaylistPlay, contentDescription = "Episodes", tint = Color.White, modifier = Modifier.size(menuIconSz))
                                     Spacer(Modifier.width(6.dp))
                                     Text("Episodes", color = Color.White, fontSize = menuTextSz)
                                 }
-
-                                Row(
-                                    modifier = Modifier.clickable { /* TODO: Subtitles */ },
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(Icons.Filled.Subtitles, contentDescription = "Subtitles",
-                                        tint = Color.White, modifier = Modifier.size(menuIconSz))
+                                Row(modifier = Modifier.clickable { /* TODO: Subtitles */ }, verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Filled.Subtitles, contentDescription = "Subtitles", tint = Color.White, modifier = Modifier.size(menuIconSz))
                                     Spacer(Modifier.width(6.dp))
                                     Text("Subtitles", color = Color.White, fontSize = menuTextSz)
                                 }
-
-                                Row(
-                                    modifier = Modifier.clickable { /* TODO: Next Episode */ },
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(Icons.Filled.SkipNext, contentDescription = "Next Episode",
-                                        tint = Color.White, modifier = Modifier.size(menuIconSz))
+                                Row(modifier = Modifier.clickable { /* TODO: Next Episode */ }, verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Filled.SkipNext, contentDescription = "Next Episode", tint = Color.White, modifier = Modifier.size(menuIconSz))
                                     Spacer(Modifier.width(6.dp))
                                     Text("Next Episode", color = Color.White, fontSize = menuTextSz)
                                 }
                             }
                         } else {
-                            // Only Subtitles → align to RIGHT end of seekbar
                             Row(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxWidth()
-                                    .padding(end = 32.dp), // tweak if needed to flush to seekbar end
+                                modifier = Modifier.weight(1f).fillMaxWidth().padding(end = 32.dp),
                                 horizontalArrangement = Arrangement.End,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(
-                                    modifier = Modifier.clickable { /* TODO: Subtitles */ },
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(Icons.Filled.Subtitles, contentDescription = "Subtitles",
-                                        tint = Color.White, modifier = Modifier.size(menuIconSz))
+                                Row(modifier = Modifier.clickable { /* TODO: Subtitles */ }, verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Filled.Subtitles, contentDescription = "Subtitles", tint = Color.White, modifier = Modifier.size(menuIconSz))
                                     Spacer(Modifier.width(6.dp))
                                     Text("Subtitles", color = Color.White, fontSize = menuTextSz)
                                 }
                             }
                         }
 
-                        // Right area mirrors Row 1’s trailing space:
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
-                            text = formatTime(
-                                exoPlayer.duration.coerceAtLeast(0L) - currentPosition.value
-                            ),
-                            color = Color.Transparent,
+                            text = formatTime(exoPlayer.duration.coerceAtLeast(0L) - currentPosition.value),
+                            color = Color.Transparent, // invisible spacer to mirror Row 1
                             fontSize = 14.sp
                         )
                     }
@@ -680,7 +662,6 @@ fun MainPlayerScreen(
         BackHandler { navController.popBackStack() }
     }
 }
-
 @Composable
 fun RememberAndAttachAudioEffects(exoPlayer: ExoPlayer) {
     var enhancer: LoudnessEnhancer? by remember { mutableStateOf(null) }

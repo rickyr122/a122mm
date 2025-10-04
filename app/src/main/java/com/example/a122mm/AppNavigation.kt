@@ -75,24 +75,14 @@ fun AppNavigation(modifier: Modifier = Modifier) {
         }
 
         composable(
-            route = "playmovie/{cFlareVid}/{cFlareSrt}/{cProgress}/{mTitle}",
+            route = "playmovie/{mId}",
             arguments = listOf(
-                navArgument("cFlareVid") { type = NavType.StringType },
-                navArgument("cFlareSrt") { type = NavType.StringType },
-                navArgument("cProgress") { type = NavType.IntType },
-                navArgument("mTitle") { type = NavType.StringType }
+                navArgument("mId") { type = NavType.StringType }
             )
         ) { backStackEntry ->
-            val cFlareVid = backStackEntry.arguments?.getString("cFlareVid") ?: ""
-            val cFlareSrt = backStackEntry.arguments?.getString("cFlareSrt")?: ""
-            val cProgress = backStackEntry.arguments?.getInt("cProgress") ?: 0
-            val mTitle    = Uri.decode(backStackEntry.arguments?.getString("mTitle") ?: "")
-
+            val videoCode = backStackEntry.arguments?.getString("mId") ?: ""
             MainPlayerScreen(
-                videoUrl = cFlareVid.fixEncoding(),
-                subtitleUrl = cFlareSrt.fixEncoding(),
-                progress = cProgress,
-                tTitle = mTitle.fixEncoding(),
+                videoCode = videoCode,
                 navController = navController
             )
         }

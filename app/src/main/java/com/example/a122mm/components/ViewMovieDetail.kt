@@ -2,7 +2,6 @@ package com.example.a122mm.components
 
 import android.app.Activity
 import android.content.res.Configuration
-import android.net.Uri
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
@@ -618,18 +617,11 @@ fun MovieDetailContent(
                         Spacer(Modifier.height(4.dp))
 
                         val buttonLabel = if (movie.c_remaining > 0) "Resume" else "Play"
-
+                        Log.d("Detail Id check", "mId -> ${movie.playId}")
                         Button(
                             onClick = {
-                                        val encodedVid   = Uri.encode(movie.cFlareVid ?: "", "").replace("%60","%27")
-                                        val encodedSrt   = Uri.encode(movie.cFlareSrt ?: "", "").replace("%60","%27")
-
-                                        val vTitle = if (movie.pTitle == "") movie.m_title else movie.pTitle
-                                        val encodedTitle = Uri.encode(vTitle, "")
-
-                                        Log.d("encodedVid", "encodedVid: '${encodedVid}'")
                                         navController.navigate(
-                                            "playmovie/$encodedVid/$encodedSrt/${movie.cProgress}/$encodedTitle"
+                                            "playmovie/${movie.playId}"
                                         )
                                       },
                             shape = RoundedCornerShape(3.dp),
