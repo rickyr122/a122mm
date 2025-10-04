@@ -151,13 +151,15 @@ fun MainPlayerScreen(
     // ──────────────────────────
     // Fetch video details by code
     // ──────────────────────────
+    var currentCode by remember { mutableStateOf(videoCode) }
     var vData by remember { mutableStateOf<VideoDetailsResponse?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
+
     val api: ApiVideoDetails = ApiClient.create(ApiVideoDetails::class.java)
 
-    LaunchedEffect(videoCode) {
+    LaunchedEffect(currentCode) {
         try {
-            vData = api.getVideoDetails(videoCode)
+            vData = api.getVideoDetails(currentCode)
             error = null
         } catch (e: Exception) {
             error = e.message
@@ -211,6 +213,7 @@ fun MainPlayerScreen(
     val subtitleUrl = vData!!.cFlareSrt
     val progress = vData!!.cProgress
     val tTitle = vData!!.mTitle
+    val nextId = vData!!.nextTvId
 
     val externalSubUrl = subtitleUrl.trim()
     val hasExternalSrt = externalSubUrl.isNotEmpty()
@@ -606,6 +609,8 @@ fun MainPlayerScreen(
                     val menuIconSz = if (isTablet) 32.dp else 20.dp
                     val menuTextSz = if (isTablet) 18.sp else 14.sp
                     val spacerHeight = if (isTablet) 24.dp else 8.dp
+                    val ctx = LocalContext.current
+
                     Spacer(Modifier.height(spacerHeight))
 
                     // Row 2: Buttons (Episodes/Subtitles/Next) — same logic; detect episodes via cFlareVid
@@ -623,15 +628,49 @@ fun MainPlayerScreen(
                                     Spacer(Modifier.width(6.dp))
                                     Text("Episodes", color = Color.White, fontSize = menuTextSz)
                                 }
-                                Row(modifier = Modifier.clickable { /* TODO: Subtitles */ }, verticalAlignment = Alignment.CenterVertically) {
+                                Row(
+                                    modifier = Modifier
+                                                .clickable { /* TODO: Subtitles */ },
+                                                verticalAlignment = Alignment.CenterVertically
+                                ) {
                                     Icon(Icons.Filled.Subtitles, contentDescription = "Subtitles", tint = Color.White, modifier = Modifier.size(menuIconSz))
                                     Spacer(Modifier.width(6.dp))
                                     Text("Subtitles", color = Color.White, fontSize = menuTextSz)
                                 }
-                                Row(modifier = Modifier.clickable { /* TODO: Next Episode */ }, verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Filled.SkipNext, contentDescription = "Next Episode", tint = Color.White, modifier = Modifier.size(menuIconSz))
-                                    Spacer(Modifier.width(6.dp))
-                                    Text("Next Episode", color = Color.White, fontSize = menuTextSz)
+
+                                if (nextId != "") {
+                                    Row(
+                                        modifier = Modifier.clickable {
+                                            val next = vData?.nextTvId.orEmpty()
+//                                            if (next.isBlank()) {
+//                                                android.widget.Toast.makeText(ctx, "No next episode", android.widget.Toast.LENGTH_SHORT).show()
+//                                                return@clickable
+//                                            }
+
+                                            // Optional: stop current playback immediately so user sees a quick reload
+                                            try { exoPlayer.stop() } catch (_: Throwable) {}
+
+                                            // Show spinner while fetching the next episode
+                                            vData = null
+
+                                            // Trigger API: this re-runs LaunchedEffect(currentCode) above
+                                            currentCode = next
+                                        },
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.SkipNext,
+                                            contentDescription = "Next Episode",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(menuIconSz)
+                                        )
+                                        Spacer(Modifier.width(6.dp))
+                                        Text(
+                                            "Next Episode",
+                                            color = Color.White,
+                                            fontSize = menuTextSz
+                                        )
+                                    }
                                 }
                             }
                         } else {
