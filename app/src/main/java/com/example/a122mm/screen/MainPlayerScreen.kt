@@ -206,7 +206,7 @@ fun MainPlayerScreen(
     }
     if (vData == null) {
         Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(color = Color.White, strokeWidth = 4.dp)
+            CircularProgressIndicator(color = Color.Red, strokeWidth = 4.dp)
         }
         return
     }
@@ -393,12 +393,30 @@ fun MainPlayerScreen(
     val isLoading = remember { mutableStateOf(true) }
     val isPlayingState = remember { mutableStateOf(exoPlayer.isPlaying) }
 
+    // Start visible on first load; then auto-hide behavior kicks in
+    val isControlsVisible = remember { mutableStateOf(true) }
+    var autoHideEnabled by remember { mutableStateOf(false) }
+
+// Auto-hide only when visible AND auto-hide is enabled.
+// This restarts the 4s timer every time controls become visible.
+    LaunchedEffect(isControlsVisible.value, autoHideEnabled) {
+        if (autoHideEnabled && isControlsVisible.value) {
+            delay(4000)
+            isControlsVisible.value = false
+        }
+    }
+
     DisposableEffect(exoPlayer) {
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
                 when (state) {
                     Player.STATE_BUFFERING -> isLoading.value = true
-                    Player.STATE_READY -> isLoading.value = false
+                    Player.STATE_READY -> {
+                        isLoading.value = false
+                        // Show controls on first load, then enable auto-hide behavior.
+                        isControlsVisible.value = true
+                        autoHideEnabled = true
+                    }
                     Player.STATE_ENDED -> navController.popBackStack()
                 }
             }
@@ -414,13 +432,14 @@ fun MainPlayerScreen(
     }
 
     // Tap-to-toggle + auto-hide after 4s
-    val isControlsVisible = remember { mutableStateOf(false) }
-    LaunchedEffect(isControlsVisible.value) {
-        if (isControlsVisible.value) {
-            delay(4000)
-            isControlsVisible.value = false
-        }
-    }
+//    val isControlsVisible = remember { mutableStateOf(false) }
+//    LaunchedEffect(isControlsVisible.value) {
+//        if (isControlsVisible.value) {
+//            delay(4000)
+//            isControlsVisible.value = false
+//        }
+//    }
+
 
     // ──────────────────────────
     // UI (kept intact; just binds to variables from vData)
@@ -463,14 +482,14 @@ fun MainPlayerScreen(
         if (isLoading.value) {
             CircularProgressIndicator(
                 modifier = Modifier.size(48.dp).align(Alignment.Center),
-                color = Color.White,
+                color = Color.Red,
                 strokeWidth = 4.dp
             )
         }
 
         // Title (now from API)
         AnimatedVisibility(
-            visible = isControlsVisible.value,
+            visible = isControlsVisible.value && !isLoading.value,
             enter = fadeIn() + slideInVertically(initialOffsetY = { -100 }),
             exit = fadeOut() + slideOutVertically(targetOffsetY = { -100 })
         ) {
@@ -489,7 +508,7 @@ fun MainPlayerScreen(
 
         // Back
         AnimatedVisibility(
-            visible = isControlsVisible.value,
+            visible = isControlsVisible.value && !isLoading.value,
             enter = fadeIn() + slideInVertically(initialOffsetY = { -100 }),
             exit = fadeOut() + slideOutVertically(targetOffsetY = { -100 })
         ) {
@@ -513,7 +532,11 @@ fun MainPlayerScreen(
         val forwardScale by animateFloatAsState(if (isForwardPressed) 1.2f else 1f, label = "forwardScale")
 
         // Center controls
-        AnimatedVisibility(visible = isControlsVisible.value, enter = fadeIn() + scaleIn(), exit = fadeOut() + scaleOut()) {
+        AnimatedVisibility(
+            visible = isControlsVisible.value && !isLoading.value,
+            enter = fadeIn() + scaleIn(),
+            exit = fadeOut() + scaleOut()
+        ) {
             Box(Modifier.fillMaxSize()) {
                 Row(
                     modifier = Modifier.align(Alignment.Center),
@@ -576,7 +599,7 @@ fun MainPlayerScreen(
 
         // Bottom: slider + time + (buttons)
         AnimatedVisibility(
-            visible = isControlsVisible.value,
+            visible = isControlsVisible.value && !isLoading.value,
             enter = fadeIn() + slideInVertically(initialOffsetY = { 100 }),
             exit = fadeOut() + slideOutVertically(targetOffsetY = { 100 })
         ) {
