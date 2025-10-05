@@ -91,6 +91,9 @@ import com.example.a122mm.components.RecentWatchResponse
 import com.example.a122mm.dataclass.ApiClient
 import com.example.a122mm.dataclass.NetworkModule
 import com.example.a122mm.helper.CustomSlider
+import com.example.a122mm.helper.fixEncoding
+import com.example.a122mm.helper.encodeUrlSegments
+import com.example.a122mm.helper.encodeUrlSegmentsStrict
 import com.example.a122mm.helper.formatTime
 import com.example.a122mm.helper.getCFlareUrl
 import kotlinx.coroutines.delay
@@ -209,11 +212,13 @@ fun MainPlayerScreen(
     }
 
     // Map API → local vars (replaces previous parameters)
-    val videoUrl = vData!!.cFlareVid
-    val subtitleUrl = vData!!.cFlareSrt
+    val videoUrl = vData!!.cFlareVid //.fixEncoding()
+    val subtitleUrl = vData!!.cFlareSrt //.fixEncoding()
     val progress = vData!!.cProgress
-    val tTitle = vData!!.mTitle
+    val tTitle = vData!!.mTitle.fixEncoding()
     val nextId = vData!!.nextTvId
+
+
 
     val externalSubUrl = subtitleUrl.trim()
     val hasExternalSrt = externalSubUrl.isNotEmpty()
@@ -260,15 +265,18 @@ fun MainPlayerScreen(
 
                 val startMs = (progress.coerceAtLeast(0)).toLong() * 1_000L - 5_000L
 
-                val resolvedVideoUrl = getCFlareUrl(videoUrl)
+                val resolvedVideoUrl = encodeUrlSegmentsStrict(getCFlareUrl(videoUrl))
                 Log.d("MainPlayer", "Video URL -> $resolvedVideoUrl  (raw: $videoUrl)")
 
                 val mediaItemBuilder = MediaItem.Builder()
                     .setUri(Uri.parse(getCFlareUrl(videoUrl)))
 
                 if (hasExternalSrt) {
+                    val resolvedSubUrl = encodeUrlSegmentsStrict(getCFlareUrl(externalSubUrl))
+                    Log.d("MainSubs", "Subs URL -> $resolvedSubUrl  (raw: $externalSubUrl)")
+
                     val subCfg = MediaItem.SubtitleConfiguration.Builder(
-                        Uri.parse(getCFlareUrl(externalSubUrl))
+                        Uri.parse(resolvedSubUrl)
                     )
                         .setMimeType(MimeTypes.APPLICATION_SUBRIP)
                         .setLanguage("en")
@@ -564,7 +572,7 @@ fun MainPlayerScreen(
 
         val configuration = LocalConfiguration.current
         val isTablet = configuration.smallestScreenWidthDp >= 600
-        val bottomLift = if (isTablet) 54.dp else 12.dp
+        val bottomLift = if (isTablet) 54.dp else 20.dp
 
         // Bottom: slider + time + (buttons)
         AnimatedVisibility(
@@ -606,9 +614,9 @@ fun MainPlayerScreen(
                         Text(text = formatTime(remaining), color = Color.White, fontSize = 14.sp)
                     }
 
-                    val menuIconSz = if (isTablet) 32.dp else 20.dp
-                    val menuTextSz = if (isTablet) 18.sp else 14.sp
-                    val spacerHeight = if (isTablet) 24.dp else 8.dp
+                    val menuIconSz = if (isTablet) 32.dp else 24.dp
+                    val menuTextSz = if (isTablet) 18.sp else 16.sp
+                    val spacerHeight = if (isTablet) 24.dp else 2.dp
                     val ctx = LocalContext.current
 
                     Spacer(Modifier.height(spacerHeight))
@@ -616,7 +624,12 @@ fun MainPlayerScreen(
                     // Row 2: Buttons (Episodes/Subtitles/Next) — same logic; detect episodes via cFlareVid
                     val hasEpisodes = remember(videoUrl) { videoUrl.contains("Channel-") }
 
-                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(end = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         if (hasEpisodes) {
                             Row(
                                 modifier = Modifier.weight(1f),
