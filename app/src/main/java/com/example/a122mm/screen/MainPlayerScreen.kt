@@ -51,8 +51,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.State
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -85,17 +85,13 @@ import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
 import androidx.navigation.NavController
-import com.example.a122mm.components.ApiServiceRecent
-import com.example.a122mm.components.MovieDetail
-import com.example.a122mm.components.RecentWatchResponse
 import com.example.a122mm.dataclass.ApiClient
-import com.example.a122mm.dataclass.NetworkModule
 import com.example.a122mm.helper.CustomSlider
-import com.example.a122mm.helper.fixEncoding
-import com.example.a122mm.helper.encodeUrlSegments
 import com.example.a122mm.helper.encodeUrlSegmentsStrict
+import com.example.a122mm.helper.fixEncoding
 import com.example.a122mm.helper.formatTime
 import com.example.a122mm.helper.getCFlareUrl
+import com.example.a122mm.helper.setScreenOrientation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import retrofit2.http.GET
@@ -151,6 +147,11 @@ fun MainPlayerScreen(
     val context = LocalContext.current
     val activity = context as? Activity
 
+    val configuration = LocalConfiguration.current
+    val isTablet = configuration.smallestScreenWidthDp >= 600
+    val bottomLift = if (isTablet) 54.dp else 20.dp
+
+
     // ──────────────────────────
     // Fetch video details by code
     // ──────────────────────────
@@ -180,7 +181,14 @@ fun MainPlayerScreen(
         activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         onDispose {
-            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            if (!isTablet) {
+                // force back to portrait when leaving on phones
+                activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            } else {
+                // let system handle freely on tablets
+                activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            }
+
             activity?.window?.decorView?.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
             activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
@@ -217,8 +225,6 @@ fun MainPlayerScreen(
     val progress = vData!!.cProgress
     val tTitle = vData!!.mTitle.fixEncoding()
     val nextId = vData!!.nextTvId
-
-
 
     val externalSubUrl = subtitleUrl.trim()
     val hasExternalSrt = externalSubUrl.isNotEmpty()
@@ -397,12 +403,16 @@ fun MainPlayerScreen(
     val isControlsVisible = remember { mutableStateOf(true) }
     var autoHideEnabled by remember { mutableStateOf(false) }
 
+    var allowControlsWhileLoading by remember { mutableStateOf(false) }
+    var suppressSpinner by remember { mutableStateOf(false) }
+
 // Auto-hide only when visible AND auto-hide is enabled.
 // This restarts the 4s timer every time controls become visible.
     LaunchedEffect(isControlsVisible.value, autoHideEnabled) {
         if (autoHideEnabled && isControlsVisible.value) {
             delay(4000)
             isControlsVisible.value = false
+            allowControlsWhileLoading = false   // reset after hide
         }
     }
 
@@ -416,6 +426,8 @@ fun MainPlayerScreen(
                         // Show controls on first load, then enable auto-hide behavior.
                         isControlsVisible.value = true
                         autoHideEnabled = true
+                        suppressSpinner = false
+                        allowControlsWhileLoading = false
                     }
                     Player.STATE_ENDED -> navController.popBackStack()
                 }
@@ -451,7 +463,13 @@ fun MainPlayerScreen(
             .clickable(
                 indication = null,
                 interactionSource = remember { MutableInteractionSource() }
-            ) { isControlsVisible.value = !isControlsVisible.value }
+            ) {
+                isControlsVisible.value = !isControlsVisible.value
+
+                if (isLoading.value && isControlsVisible.value) {
+                    allowControlsWhileLoading = true
+                }
+            }
     ) {
         // Player surface
         AndroidView(
@@ -479,7 +497,7 @@ fun MainPlayerScreen(
             modifier = Modifier.fillMaxSize()
         )
 
-        if (isLoading.value) {
+        if (isLoading.value && !suppressSpinner) {
             CircularProgressIndicator(
                 modifier = Modifier.size(48.dp).align(Alignment.Center),
                 color = Color.Red,
@@ -489,7 +507,8 @@ fun MainPlayerScreen(
 
         // Title (now from API)
         AnimatedVisibility(
-            visible = isControlsVisible.value && !isLoading.value,
+            visible = isControlsVisible.value && (!isLoading.value || suppressSpinner || allowControlsWhileLoading)
+,
             enter = fadeIn() + slideInVertically(initialOffsetY = { -100 }),
             exit = fadeOut() + slideOutVertically(targetOffsetY = { -100 })
         ) {
@@ -508,7 +527,8 @@ fun MainPlayerScreen(
 
         // Back
         AnimatedVisibility(
-            visible = isControlsVisible.value && !isLoading.value,
+            visible = isControlsVisible.value && (!isLoading.value || suppressSpinner || allowControlsWhileLoading)
+,
             enter = fadeIn() + slideInVertically(initialOffsetY = { -100 }),
             exit = fadeOut() + slideOutVertically(targetOffsetY = { -100 })
         ) {
@@ -533,7 +553,8 @@ fun MainPlayerScreen(
 
         // Center controls
         AnimatedVisibility(
-            visible = isControlsVisible.value && !isLoading.value,
+            visible = isControlsVisible.value && (!isLoading.value || suppressSpinner || allowControlsWhileLoading)
+,
             enter = fadeIn() + scaleIn(),
             exit = fadeOut() + scaleOut()
         ) {
@@ -547,6 +568,15 @@ fun MainPlayerScreen(
                     IconButton(
                         onClick = {
                             isReplayPressed = true
+
+                            // Always show controls + suppress spinner for a smooth jump
+                            isControlsVisible.value = true
+                            suppressSpinner = true
+                            coroutineScope.launch {
+                                delay(1000)       // safety: auto-clear if READY lags
+                                suppressSpinner = false
+                            }
+
                             exoPlayer.seekBack()
                             coroutineScope.launch { delay(100); isReplayPressed = false }
                         },
@@ -564,6 +594,7 @@ fun MainPlayerScreen(
                             val newState = !exoPlayer.isPlaying
                             exoPlayer.playWhenReady = newState
                             isPlayingState.value = newState
+                            isControlsVisible.value = true   // restart 4s timer
                             coroutineScope.launch { delay(100); isPlayPressed = false }
                         },
                         modifier = Modifier.size(96.dp).scale(playScale).padding(horizontal = 12.dp)
@@ -582,6 +613,14 @@ fun MainPlayerScreen(
                     IconButton(
                         onClick = {
                             isForwardPressed = true
+
+                            isControlsVisible.value = true
+                            suppressSpinner = true
+                            coroutineScope.launch {
+                                delay(1000)
+                                suppressSpinner = false
+                            }
+
                             exoPlayer.seekForward()
                             coroutineScope.launch { delay(100); isForwardPressed = false }
                         },
@@ -593,13 +632,10 @@ fun MainPlayerScreen(
             }
         }
 
-        val configuration = LocalConfiguration.current
-        val isTablet = configuration.smallestScreenWidthDp >= 600
-        val bottomLift = if (isTablet) 54.dp else 20.dp
-
         // Bottom: slider + time + (buttons)
         AnimatedVisibility(
-            visible = isControlsVisible.value && !isLoading.value,
+            visible = isControlsVisible.value && (!isLoading.value || suppressSpinner || allowControlsWhileLoading)
+,
             enter = fadeIn() + slideInVertically(initialOffsetY = { 100 }),
             exit = fadeOut() + slideOutVertically(targetOffsetY = { 100 })
         ) {
@@ -619,12 +655,14 @@ fun MainPlayerScreen(
                             onSeekChanged = {
                                 isSeeking.value = true
                                 seekPosition.value = it
+                                isControlsVisible.value = true   // keep controls alive while dragging
                             },
                             onSeekFinished = {
                                 val newPos = (seekPosition.value * duration.value).toLong()
                                 exoPlayer.seekTo(newPos)
                                 currentPosition.value = newPos
                                 isSeeking.value = false
+                                isControlsVisible.value = true   // keep controls alive while dragging
                             },
                             modifier = Modifier.weight(1f).height(32.dp)
                         )

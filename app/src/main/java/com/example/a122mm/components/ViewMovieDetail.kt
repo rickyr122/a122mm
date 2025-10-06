@@ -291,7 +291,6 @@ fun ViewMovieDetail(
     }
 }
 
-
 @Composable
 fun MovieDetailContent(
     movie: MovieDetail,
@@ -300,9 +299,14 @@ fun MovieDetailContent(
     onUserChanged: () -> Unit = {},   // NEW
     onBackPressed: () -> Unit = {}    // NEW
 ) {
+    val context = LocalContext.current
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     val isTablet = configuration.screenWidthDp >= 600
+
+//    LaunchedEffect(Unit) {
+//        if (!isTablet) context.setScreenOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT)
+//    }
 
     val rtState = movie.rt_state
 
