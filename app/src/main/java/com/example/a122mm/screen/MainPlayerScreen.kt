@@ -27,14 +27,17 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Forward10
@@ -63,12 +66,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.zIndex
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -96,6 +105,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import retrofit2.http.GET
 import retrofit2.http.Query
+import kotlin.math.roundToInt
+import androidx.compose.animation.AnimatedVisibility as AV
+
 
 data class VideoDetailsResponse(
     val gId: String,
@@ -212,8 +224,15 @@ fun MainPlayerScreen(
         }
         return
     }
+    val spinnerSz = if (isTablet) 64.dp else 54.dp
     if (vData == null) {
-        Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .size(spinnerSz)
+                .background(Color.Black),
+            contentAlignment = Alignment.Center
+        ) {
             CircularProgressIndicator(color = Color.Red, strokeWidth = 4.dp)
         }
         return
@@ -499,7 +518,9 @@ fun MainPlayerScreen(
 
         if (isLoading.value && !suppressSpinner) {
             CircularProgressIndicator(
-                modifier = Modifier.size(48.dp).align(Alignment.Center),
+                modifier = Modifier
+                    .size(spinnerSz)
+                    .align(Alignment.Center),
                 color = Color.Red,
                 strokeWidth = 4.dp
             )
@@ -649,29 +670,62 @@ fun MainPlayerScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     // Row 1: Seek + remaining
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                        CustomSlider(
-                            progress = seekPosition.value,
-                            onSeekChanged = {
-                                isSeeking.value = true
-                                seekPosition.value = it
-                                isControlsVisible.value = true   // keep controls alive while dragging
-                            },
-                            onSeekFinished = {
-                                val newPos = (seekPosition.value * duration.value).toLong()
-                                exoPlayer.seekTo(newPos)
-                                currentPosition.value = newPos
-                                isSeeking.value = false
-                                isControlsVisible.value = true   // keep controls alive while dragging
-                            },
-                            modifier = Modifier.weight(1f).height(32.dp)
-                        )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        // overlay box so label shares the same coordinate space as the slider
+                        val sliderBoxWidthPx = remember { mutableStateOf(0) }
+//                        val density = LocalDensity.current
+
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(32.dp)
+                                .onGloballyPositioned { sliderBoxWidthPx.value = it.size.width } // width of the slider box
+                        ) {
+                            // the actual slider
+                            CustomSlider(
+                                progress = seekPosition.value,
+                                onSeekChanged = {
+                                    isSeeking.value = true
+                                    seekPosition.value = it
+                                    isControlsVisible.value = true // keep HUD alive while dragging
+                                },
+                                onSeekFinished = {
+                                    val newPos = (seekPosition.value * duration.value).toLong()
+                                    exoPlayer.seekTo(newPos)
+                                    currentPosition.value = newPos
+                                    isSeeking.value = false
+                                    isControlsVisible.value = true
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(32.dp)
+                            )
+
+                            // Compute preview text
+                            val previewMs = (seekPosition.value * duration.value).toLong()
+                            val previewText = formatTime(previewMs)
+
+                            ScrubTimeLabel(
+                                visible      = isSeeking.value && sliderBoxWidthPx.value > 0,
+                                trackWidthPx = sliderBoxWidthPx.value,
+                                progress01   = seekPosition.value,
+                                yLift        = (-28).dp,
+                                text         = previewText
+                            )
+
+                        }
 
                         Spacer(modifier = Modifier.width(12.dp))
 
+//                        val totalDuration = exoPlayer.duration.coerceAtLeast(0L)
+//                        val position = currentPosition.value
+//                        val remaining = (totalDuration - position).coerceAtLeast(0L)
+//                        Text(text = formatTime(remaining), color = Color.White, fontSize = 14.sp)
                         val totalDuration = exoPlayer.duration.coerceAtLeast(0L)
-                        val position = currentPosition.value
-                        val remaining = (totalDuration - position).coerceAtLeast(0L)
+                        val remaining = (totalDuration - currentPosition.value).coerceAtLeast(0L)
                         Text(text = formatTime(remaining), color = Color.White, fontSize = 14.sp)
                     }
 
@@ -856,3 +910,52 @@ fun RememberAndAttachAudioEffects(exoPlayer: ExoPlayer) {
         }
     }
 }
+
+@Composable
+private fun ScrubTimeLabel(
+    visible: Boolean,
+    trackWidthPx: Int,
+    progress01: Float,          // 0f..1f (seekPosition)
+    yLift: Dp = (-28).dp,
+    text: String
+) {
+    val density = LocalDensity.current
+    var labelWidthPx by remember { mutableStateOf(0) }
+
+    // compute X in px relative to the track, then to dp
+    val clampedTrack = (trackWidthPx - labelWidthPx).coerceAtLeast(0)
+    val xPx = (clampedTrack * progress01.coerceIn(0f, 1f)).roundToInt()
+    val xDp = with(density) { xPx.toDp() }
+
+    // Always place the container so the Text can measure; animate only the appearance
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .zIndex(2f) // stay above slider
+    ) {
+        AnimatedVisibility(visible = visible, enter = fadeIn(), exit = fadeOut()) {
+            // compute position again here for safety
+            val track = (trackWidthPx - labelWidthPx).coerceAtLeast(0)
+            val xPx = (track * progress01.coerceIn(0f, 1f)).roundToInt()
+            val xDp = with(density) { xPx.toDp() }
+
+            // move the entire pill (background + text)
+            Box(
+                modifier = Modifier
+                    .absoluteOffset(x = xDp, y = yLift)
+                    .background(Color.White, shape = RoundedCornerShape(6.dp))
+                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                    .onGloballyPositioned { labelWidthPx = it.size.width }
+            ) {
+                Text(
+                    text = text,
+                    color = Color.Black,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 12.sp,
+                )
+            }
+        }
+    }
+}
+
+
