@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.absoluteOffset
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -39,6 +40,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -50,6 +54,7 @@ import androidx.compose.material.icons.filled.Replay10
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material.Divider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -65,10 +70,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -76,6 +83,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -98,6 +106,7 @@ import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
 import androidx.navigation.NavController
+import coil.compose.AsyncImage
 import com.example.a122mm.dataclass.ApiClient
 import com.example.a122mm.helper.CustomSlider
 import com.example.a122mm.helper.encodeUrlSegmentsStrict
@@ -105,6 +114,7 @@ import com.example.a122mm.helper.fixEncoding
 import com.example.a122mm.helper.formatTime
 import com.example.a122mm.helper.getCFlareUrl
 import com.example.a122mm.helper.setScreenOrientation
+import com.example.a122mm.utility.formatDurationFromMinutes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -112,7 +122,6 @@ import kotlinx.coroutines.withContext
 import retrofit2.http.GET
 import retrofit2.http.Query
 import kotlin.math.roundToInt
-import androidx.compose.animation.AnimatedVisibility as AV
 
 
 data class VideoDetailsResponse(
@@ -130,12 +139,34 @@ data class VideoDetailsResponse(
     val crTime: Int
 )
 
+// --- Episodes API models ---
+data class EpisodesResponse(
+    val seasons: List<String>,             // e.g. ["Season 1", "Season 2", ...]
+    val episodes: List<EpisodeItem>,       // items for the selected season
+    val gName: String,                     // group/show name
+    val activeSeason: Int,                 // 1-based
+    val activeEpisodeIndex: Int            // 0-based (episode index in the list)
+)
+
+data class EpisodeItem(
+    val tvId: String,
+    val tvTitle: String,
+    val tvDuration: Int,
+    val tvCvrUrl: String,
+    val tvDescription: String
+)
 
 interface ApiVideoDetails {
     @GET("getvideodetails")
     suspend fun getVideoDetails(
         @Query("code") code: String
     ): VideoDetailsResponse
+
+    @GET("gettvepisodes")
+    suspend fun getEpisodes(
+        @Query("code") code: String,
+        @Query("season") season: Int
+    ): List<EpisodeItem>
 }
 
 // ----- ViewModel: wiring & API calls -----
@@ -176,6 +207,7 @@ fun MainPlayerScreen(
 
     var manualSubtitleChange by remember { mutableStateOf(false) }
     var subtitleAvailable by remember { mutableStateOf(false) }
+
 
     // ──────────────────────────
     // Fetch video details by code
@@ -283,8 +315,6 @@ fun MainPlayerScreen(
         }
     }
 
-
-
     // TrackSelector respects your external SRT rule
     val trackSelector = remember(hasExternalSrt) {
         DefaultTrackSelector(context).apply {
@@ -330,8 +360,11 @@ fun MainPlayerScreen(
                 val resolvedVideoUrl = encodeUrlSegmentsStrict(getCFlareUrl(videoUrl))
                 Log.d("MainPlayer", "Video URL -> $resolvedVideoUrl  (raw: $videoUrl)")
 
+//                val mediaItemBuilder = MediaItem.Builder()
+//                    .setUri(Uri.parse(getCFlareUrl(videoUrl)))
+
                 val mediaItemBuilder = MediaItem.Builder()
-                    .setUri(Uri.parse(getCFlareUrl(videoUrl)))
+                    .setUri(Uri.parse(resolvedVideoUrl))
 
                 if (hasExternalSrt) {
                     val resolvedSubUrl = encodeUrlSegmentsStrict(getCFlareUrl(externalSubUrl))
@@ -502,14 +535,38 @@ fun MainPlayerScreen(
         }
     }
 
-    // Tap-to-toggle + auto-hide after 4s
-//    val isControlsVisible = remember { mutableStateOf(false) }
-//    LaunchedEffect(isControlsVisible.value) {
-//        if (isControlsVisible.value) {
-//            delay(4000)
-//            isControlsVisible.value = false
-//        }
-//    }
+    var showEpisodes by remember { mutableStateOf(false) }
+
+    var epSeasons by remember { mutableStateOf(listOf<String>()) }
+    var epList by remember { mutableStateOf(listOf<EpisodeItem>()) }
+    var epSelectedSeason by remember { mutableStateOf(vData!!.sId.coerceAtLeast(1)) }
+    var epSelectedSeasonIndex by remember { mutableStateOf((vData!!.sId.coerceAtLeast(1)) - 1) }
+    var epActiveIndex by remember { mutableStateOf(vData!!.tvOrder.coerceAtLeast(1) - 1) }
+
+    val episodesApi = ApiClient.create(ApiVideoDetails::class.java)
+    var epLoading by remember { mutableStateOf(false) }
+
+    LaunchedEffect(showEpisodes, epSelectedSeason) {
+        if (!showEpisodes) return@LaunchedEffect
+        epLoading = true
+        try {
+            // returns List<EpisodeItem>
+            val res = episodesApi.getEpisodes(
+                code = vData!!.gId,          // make sure this is the TV GROUP code your API expects
+                season = epSelectedSeason    // 1-based
+            )
+            epList = res
+            // Optionally set active index from your current tvOrder
+            epActiveIndex = (vData!!.tvOrder.coerceAtLeast(1) - 1).coerceIn(0, (epList.size - 1).coerceAtLeast(0))
+        } catch (e: Exception) {
+            epList = emptyList()
+            // Log.e("EpisodesDebug", "failed", e)
+        } finally {
+            epLoading = false
+        }
+    }
+
+
 
 
     // ──────────────────────────
@@ -791,7 +848,15 @@ fun MainPlayerScreen(
                                 horizontalArrangement = Arrangement.SpaceEvenly,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(modifier = Modifier.clickable { /* TODO: Episodes */ }, verticalAlignment = Alignment.CenterVertically) {
+                                Row(
+                                    modifier = Modifier.clickable {
+                                        exoPlayer.playWhenReady = false
+                                        showEpisodes = true
+                                        isControlsVisible.value = true
+                                        autoHideEnabled = false        // ⬅️ stop 4s timer while overlay is up
+                                    },
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
                                     Icon(Icons.Filled.PlaylistPlay, contentDescription = "Episodes", tint = Color.White, modifier = Modifier.size(menuIconSz))
                                     Spacer(Modifier.width(6.dp))
                                     Text("Episodes", color = Color.White, fontSize = menuTextSz)
@@ -961,10 +1026,226 @@ fun MainPlayerScreen(
                         )
                     }
                 }
+
+                if (showEpisodes) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color(0xE0000000))
+                    ) {
+                        // dismiss by tapping background
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .clickable(
+                                    indication = null,
+                                    interactionSource = remember { MutableInteractionSource() }
+                                ) {
+                                    showEpisodes = false
+                                    autoHideEnabled = true   // ▲ restore
+                                    exoPlayer.playWhenReady = true
+                                }
+                        )
+
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color(0xFF111111).copy(alpha = 0.95f))
+                                .padding(horizontal = 16.dp, vertical = 16.dp)
+                                .navigationBarsPadding()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(bottom = 2.dp),            // ↓ small bottom gap under the header,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                IconButton(
+                                    onClick = {
+                                                // close Episodes overlay when back is tapped
+                                                showEpisodes = false
+                                                autoHideEnabled = true
+                                                exoPlayer.playWhenReady = true
+                                              },
+                                    Modifier
+                                        .align(Alignment.Top)      // ⬅️ vertical alignment (Row aligns vertically)
+                                        .padding(0.dp)
+
+                                ) {
+                                    Icon(
+                                        Icons.Default.ArrowBack,
+                                        contentDescription = "Back",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+
+                                Text(
+                                    "Season $epSelectedSeason",
+                                    color = Color.White,
+                                    fontSize = 18.sp,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(Color(0xFF222222))
+                                        .clickable {
+
+                                        }
+                                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                                )
+                            }
+
+                            //Spacer(Modifier.height(4.dp))
+
+                            if (epLoading) {
+                                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                    CircularProgressIndicator(color = Color.Red, strokeWidth = 4.dp)
+                                }
+                            } else {
+                                var isBuffering by remember { mutableStateOf(false) }
+                                LazyRow(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 0.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    items(epList) { ep ->
+                                        val isActive = (epList.indexOf(ep) == epActiveIndex)
+
+                                        Box(
+                                            modifier = Modifier
+                                                .width(200.dp)
+                                                .height(380.dp) // fixed card width
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .background(if (isActive) Color(0xFF1E1E1E) else Color.Transparent)
+                                                .clickable {
+                                                    val next = ep.tvId
+
+                                                    if (next == currentCode) {
+                                                        showEpisodes = false
+                                                        autoHideEnabled = true
+                                                        exoPlayer.playWhenReady = true
+                                                        return@clickable
+                                                    }
+
+                                                    if (next.isBlank()) {
+                                                        android.widget.Toast.makeText(context, "No episode data", android.widget.Toast.LENGTH_SHORT).show()
+                                                        return@clickable
+                                                    }
+
+                                                    try { exoPlayer.stop() } catch (_: Throwable) {}
+                                                    showEpisodes = false
+                                                    autoHideEnabled = true
+
+                                                    // clear current data to show spinner, etc.
+                                                    vData = null
+
+                                                    // 🔥 this will automatically trigger your LaunchedEffect(currentCode)
+                                                    currentCode = next
+
+                                                    exoPlayer.playWhenReady = true
+                                                }
+                                        ) {
+                                            Column(
+                                                modifier = Modifier
+                                                    .fillMaxSize()
+                                                    .padding(6.dp)
+                                            ) {
+                                                // poster
+                                                AsyncImage(
+                                                    model = ep.tvCvrUrl,
+                                                    contentDescription = ep.tvTitle,
+                                                    contentScale = ContentScale.Crop,
+                                                    modifier = Modifier
+                                                        .aspectRatio(16f / 9f)
+                                                        .fillMaxWidth()
+                                                        .clip(RoundedCornerShape(10.dp))
+                                                )
+                                                Spacer(Modifier.height(4.dp))
+
+                                                // title
+                                                Box(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .height(38.dp), // roughly fits two lines of 14sp text
+                                                    contentAlignment = Alignment.CenterStart
+                                                ) {
+                                                    Text(
+                                                        text = ep.tvTitle.fixEncoding(),
+                                                        color = Color.White,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        fontSize = 14.sp,
+                                                        maxLines = 2,                         // ✅ allow up to 2 lines
+                                                        overflow = TextOverflow.Ellipsis,
+                                                        lineHeight = 18.sp,                   // nice spacing
+                                                        modifier = Modifier
+                                                            .align(Alignment.CenterStart)     // keep vertical centering
+                                                            .padding(horizontal = 4.dp)
+                                                    )
+                                                }
+                                                //Spacer(Modifier.height(4.dp))
+                                                // gray separator
+                                                Divider(
+                                                    color = Color.Gray.copy(alpha = 0.5f),
+                                                    thickness = 1.dp,
+                                                    modifier = Modifier.padding(
+                                                        vertical = 4.dp,
+                                                        horizontal = 4.dp
+                                                    )
+                                                )
+                                                Spacer(Modifier.height(2.dp))
+                                                // duration
+                                                Text(
+                                                    text = formatDurationFromMinutes(ep.tvDuration),
+                                                    color = Color.Gray,
+                                                    fontSize = 13.sp,
+                                                    modifier = Modifier.padding(
+                                                        start = 4.dp,
+                                                        end = 4.dp
+                                                    )
+                                                )
+                                                Spacer(Modifier.height(2.dp))
+                                                // description
+                                                Text(
+                                                    text = ep.tvDescription.fixEncoding(),
+                                                    color = Color.LightGray,
+                                                    fontSize = 13.sp,
+                                                    lineHeight = 18.sp,
+                                                    overflow = TextOverflow.Clip, // no ellipsis
+                                                    modifier = Modifier
+                                                        .padding(4.dp)
+                                                        .weight(1f, fill = true)   // let it take remaining space
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                        }
+                    }
+                }
+
             }
         }
 
-        BackHandler { navController.popBackStack() }
+//        BackHandler { navController.popBackStack() }
+        BackHandler {
+            if (showEpisodes) {
+                // Close the Episodes overlay first
+                showEpisodes = false
+                autoHideEnabled = true
+                exoPlayer.playWhenReady = true
+            } else if (showSubtitleMenu) {
+                // Or if subtitle menu is open, close it first
+                showSubtitleMenu = false
+                autoHideEnabled = true
+                exoPlayer.playWhenReady = true
+            } else {
+                // Otherwise, perform your normal back navigation
+                navController.popBackStack()
+            }
+        }
 
         if (showSubtitleMenu) {
             Box(
