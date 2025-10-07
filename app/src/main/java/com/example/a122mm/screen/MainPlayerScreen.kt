@@ -75,6 +75,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -104,8 +105,10 @@ import com.example.a122mm.helper.fixEncoding
 import com.example.a122mm.helper.formatTime
 import com.example.a122mm.helper.getCFlareUrl
 import com.example.a122mm.helper.setScreenOrientation
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import retrofit2.http.GET
 import retrofit2.http.Query
 import kotlin.math.roundToInt
@@ -172,6 +175,7 @@ fun MainPlayerScreen(
     var pendingSubSelection by remember { mutableStateOf(SubtitleOption.ENGLISH) } // default
 
     var manualSubtitleChange by remember { mutableStateOf(false) }
+    var subtitleAvailable by remember { mutableStateOf(false) }
 
     // ──────────────────────────
     // Fetch video details by code
@@ -256,6 +260,30 @@ fun MainPlayerScreen(
 
     val externalSubUrl = subtitleUrl.trim()
     val hasExternalSrt = externalSubUrl.isNotEmpty()
+
+    LaunchedEffect(subtitleUrl) {
+        subtitleAvailable = false
+
+        if (!subtitleUrl.isNullOrBlank()) {
+            subtitleAvailable = withContext(Dispatchers.IO) {
+                try {
+                    val url = java.net.URL(getCFlareUrl(subtitleUrl))
+                    (url.openConnection() as java.net.HttpURLConnection).run {
+                        requestMethod = "HEAD"
+                        connectTimeout = 3000
+                        readTimeout = 3000
+                        val ok = (responseCode == 200)
+                        disconnect()
+                        ok
+                    }
+                } catch (e: Exception) {
+                    false
+                }
+            }
+        }
+    }
+
+
 
     // TrackSelector respects your external SRT rule
     val trackSelector = remember(hasExternalSrt) {
@@ -768,30 +796,64 @@ fun MainPlayerScreen(
                                     Spacer(Modifier.width(6.dp))
                                     Text("Episodes", color = Color.White, fontSize = menuTextSz)
                                 }
-                                Row(
-                                    modifier = Modifier
-                                                .clickable {
-                                                    // pause and open menu
-                                                    exoPlayer.playWhenReady = false
-                                                    // set initial selection based on current state
-                                                    pendingSubSelection = when {
-                                                        exoPlayer.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT) -> SubtitleOption.OFF
-                                                        hasExternalSrt && exoPlayer.currentTracks.groups.any { g ->
-                                                            g.type == C.TRACK_TYPE_TEXT && (0 until g.length).any { i ->
-                                                                val f = g.getTrackFormat(i)
-                                                                f.id == "ext_srt" || f.label == "External SRT"
-                                                            }
-                                                        } -> SubtitleOption.INDONESIAN
-                                                        else -> SubtitleOption.ENGLISH
+                                if (subtitleAvailable) {
+                                    Row(
+                                        modifier = Modifier
+                                            .clickable {
+                                                // pause and open menu
+                                                exoPlayer.playWhenReady = false
+
+                                                val isTextDisabled =
+                                                    exoPlayer.trackSelectionParameters
+                                                        .disabledTrackTypes.contains(C.TRACK_TYPE_TEXT)
+
+                                                val textGroups =
+                                                    exoPlayer.currentTracks.groups.filter { it.type == C.TRACK_TYPE_TEXT }
+
+                                                // is any text track currently selected?
+                                                val hasAnyTextSelected = textGroups.any { g ->
+                                                    (0 until g.length).any { i ->
+                                                        g.isTrackSelected(
+                                                            i
+                                                        )
                                                     }
-                                                    showSubtitleMenu = true
-                                                    isControlsVisible.value = true
-                                                },
-                                                verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(Icons.Filled.Subtitles, contentDescription = "Subtitles", tint = Color.White, modifier = Modifier.size(menuIconSz))
-                                    Spacer(Modifier.width(6.dp))
-                                    Text("Subtitles", color = Color.White, fontSize = menuTextSz)
+                                                }
+
+                                                // is the selected text track the external SRT?
+                                                val isExternalSelected = textGroups.any { g ->
+                                                    (0 until g.length).any { i ->
+                                                        g.isTrackSelected(i) && run {
+                                                            val f = g.getTrackFormat(i)
+                                                            f.id == "ext_srt" || f.label == "External SRT"
+                                                        }
+                                                    }
+                                                }
+
+                                                pendingSubSelection = when {
+                                                    isTextDisabled || !hasAnyTextSelected -> SubtitleOption.OFF
+                                                    isExternalSelected -> SubtitleOption.INDONESIAN
+                                                    else -> SubtitleOption.ENGLISH
+                                                }
+
+                                                showSubtitleMenu = true
+                                                isControlsVisible.value = true
+
+                                            },
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.Subtitles,
+                                            contentDescription = "Subtitles",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(menuIconSz)
+                                        )
+                                        Spacer(Modifier.width(6.dp))
+                                        Text(
+                                            "Subtitles",
+                                            color = Color.White,
+                                            fontSize = menuTextSz
+                                        )
+                                    }
                                 }
 
                                 if (nextId != "") {
@@ -830,34 +892,63 @@ fun MainPlayerScreen(
                                 }
                             }
                         } else {
-                            Row(
-                                modifier = Modifier.weight(1f).fillMaxWidth().padding(end = 32.dp),
-                                horizontalArrangement = Arrangement.End,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
+                            if (subtitleAvailable) {
                                 Row(
-                                    modifier = Modifier.clickable {
-                                        // pause and open menu
-                                        exoPlayer.playWhenReady = false
-                                        // set initial selection based on current state
-                                        pendingSubSelection = when {
-                                            exoPlayer.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT) -> SubtitleOption.OFF
-                                            hasExternalSrt && exoPlayer.currentTracks.groups.any { g ->
-                                                g.type == C.TRACK_TYPE_TEXT && (0 until g.length).any { i ->
-                                                    val f = g.getTrackFormat(i)
-                                                    f.id == "ext_srt" || f.label == "External SRT"
-                                                }
-                                            } -> SubtitleOption.INDONESIAN
-                                            else -> SubtitleOption.ENGLISH
-                                        }
-                                        showSubtitleMenu = true
-                                        isControlsVisible.value = true
-                                    },
+                                    modifier = Modifier.weight(1f).fillMaxWidth()
+                                        .padding(end = 32.dp),
+                                    horizontalArrangement = Arrangement.End,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(Icons.Filled.Subtitles, contentDescription = "Subtitles", tint = Color.White, modifier = Modifier.size(menuIconSz))
-                                    Spacer(Modifier.width(6.dp))
-                                    Text("Subtitles", color = Color.White, fontSize = menuTextSz)
+                                    Row(
+                                        modifier = Modifier.clickable {
+                                            // pause and open menu
+                                            exoPlayer.playWhenReady = false
+
+                                            val isTextDisabled = exoPlayer.trackSelectionParameters
+                                                .disabledTrackTypes.contains(C.TRACK_TYPE_TEXT)
+
+                                            val textGroups =
+                                                exoPlayer.currentTracks.groups.filter { it.type == C.TRACK_TYPE_TEXT }
+
+                                            // is any text track currently selected?
+                                            val hasAnyTextSelected = textGroups.any { g ->
+                                                (0 until g.length).any { i -> g.isTrackSelected(i) }
+                                            }
+
+                                            // is the selected text track the external SRT?
+                                            val isExternalSelected = textGroups.any { g ->
+                                                (0 until g.length).any { i ->
+                                                    g.isTrackSelected(i) && run {
+                                                        val f = g.getTrackFormat(i)
+                                                        f.id == "ext_srt" || f.label == "External SRT"
+                                                    }
+                                                }
+                                            }
+
+                                            pendingSubSelection = when {
+                                                isTextDisabled || !hasAnyTextSelected -> SubtitleOption.OFF
+                                                isExternalSelected -> SubtitleOption.INDONESIAN
+                                                else -> SubtitleOption.ENGLISH
+                                            }
+
+                                            showSubtitleMenu = true
+                                            isControlsVisible.value = true
+                                        },
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.Subtitles,
+                                            contentDescription = "Subtitles",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(menuIconSz)
+                                        )
+                                        Spacer(Modifier.width(6.dp))
+                                        Text(
+                                            "Subtitles",
+                                            color = Color.White,
+                                            fontSize = menuTextSz
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -913,22 +1004,34 @@ fun MainPlayerScreen(
                     fun row(label: String, opt: SubtitleOption, enabled: Boolean = true) {
                         val selected = pendingSubSelection == opt
                         val alpha = if (enabled) 1f else 0.35f
+
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(vertical = 10.dp)
                                 .clickable(enabled = enabled) { pendingSubSelection = opt },
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
                         ) {
+                            // checkmark closer to text, both centered as a group
+                            if (selected) {
+                                Text(
+                                    "✓",
+                                    color = Color.White.copy(alpha = alpha),
+                                    fontSize = 18.sp,
+                                    modifier = Modifier.padding(end = 8.dp)
+                                )
+                            }
+
                             Text(
                                 text = label,
                                 color = Color.White.copy(alpha = alpha),
                                 fontSize = 18.sp,
-                                modifier = Modifier.weight(1f)
+                                textAlign = TextAlign.Center
                             )
-                            if (selected) Text("✓", color = Color.White.copy(alpha = alpha))
                         }
                     }
+
 
                     row("Off", SubtitleOption.OFF)
                     row("English", SubtitleOption.ENGLISH)
@@ -941,7 +1044,10 @@ fun MainPlayerScreen(
                             "Cancel",
                             color = Color.White,
                             modifier = Modifier
-                                .clickable { showSubtitleMenu = false }
+                                .clickable {
+                                    showSubtitleMenu = false
+                                    exoPlayer.playWhenReady = true // resume playback
+                                }
                                 .padding(horizontal = 16.dp, vertical = 8.dp)
                         )
                         Spacer(Modifier.width(12.dp))
