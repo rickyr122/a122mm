@@ -21,6 +21,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -32,6 +33,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -66,6 +68,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -873,24 +876,38 @@ fun MainPlayerScreen(
         BackHandler { navController.popBackStack() }
 
         if (showSubtitleMenu) {
-            // dark scrim that also keeps controls shown
             Box(
                 Modifier
                     .fillMaxSize()
-                    .background(Color(0x99000000))
-                    .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) {}
+                    .background(Color(0xAA000000))
             ) {
-                // small card centered
-                val cardPad = if (isTablet) 24.dp else 18.dp
+                // Dismiss area (covers entire screen, below sheet)
+                Spacer(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .clickable(
+                            indication = null,
+                            interactionSource = remember { MutableInteractionSource() }
+                        ) { showSubtitleMenu = false }
+                )
+
+                // Bottom sheet
                 Column(
                     modifier = Modifier
-                        .align(Alignment.Center)
-                        .background(Color(0xFF111111), RoundedCornerShape(12.dp))
-                        .padding(cardPad)
-                        .width(if (isTablet) 420.dp else 320.dp),
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .background(Color(0xFF111111).copy(alpha = 0.95f))
+                        .padding(horizontal = 24.dp, vertical = 24.dp)
+                        .navigationBarsPadding(),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text("Subtitles", color = Color.White, fontSize = if (isTablet) 22.sp else 20.sp, fontWeight = FontWeight.SemiBold)
-                    Spacer(Modifier.height(14.dp))
+                    Text(
+                        "Subtitles",
+                        color = Color.White,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(Modifier.height(18.dp))
 
                     @Composable
                     fun row(label: String, opt: SubtitleOption, enabled: Boolean = true) {
@@ -899,19 +916,17 @@ fun MainPlayerScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 8.dp)
+                                .padding(vertical = 10.dp)
                                 .clickable(enabled = enabled) { pendingSubSelection = opt },
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
                                 text = label,
                                 color = Color.White.copy(alpha = alpha),
-                                fontSize = if (isTablet) 18.sp else 16.sp,
+                                fontSize = 18.sp,
                                 modifier = Modifier.weight(1f)
                             )
-                            if (selected) {
-                                Text("✓", color = Color.White.copy(alpha = alpha), fontSize = if (isTablet) 18.sp else 16.sp)
-                            }
+                            if (selected) Text("✓", color = Color.White.copy(alpha = alpha))
                         }
                     }
 
@@ -919,20 +934,17 @@ fun MainPlayerScreen(
                     row("English", SubtitleOption.ENGLISH)
                     row("Indonesian", SubtitleOption.INDONESIAN, enabled = hasExternalSrt)
 
-                    Spacer(Modifier.height(16.dp))
+                    Spacer(Modifier.height(24.dp))
 
                     Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
                         Text(
                             "Cancel",
                             color = Color.White,
                             modifier = Modifier
-                                .clickable {
-                                    showSubtitleMenu = false
-                                    // don’t auto-resume; user can hit play
-                                }
+                                .clickable { showSubtitleMenu = false }
                                 .padding(horizontal = 16.dp, vertical = 8.dp)
                         )
-                        Spacer(Modifier.width(6.dp))
+                        Spacer(Modifier.width(12.dp))
                         Text(
                             "Apply",
                             color = Color.Black,
@@ -947,6 +959,7 @@ fun MainPlayerScreen(
                                     )
                                     showSubtitleMenu = false
                                     isControlsVisible.value = true
+                                    exoPlayer.playWhenReady = true // resume playback
                                 }
                                 .padding(horizontal = 16.dp, vertical = 8.dp)
                         )
@@ -954,6 +967,7 @@ fun MainPlayerScreen(
                 }
             }
         }
+
 
     }
 }
