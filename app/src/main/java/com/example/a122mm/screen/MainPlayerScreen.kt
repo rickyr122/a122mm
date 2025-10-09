@@ -43,6 +43,8 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -55,6 +57,7 @@ import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material.Divider
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -140,12 +143,9 @@ data class VideoDetailsResponse(
 )
 
 // --- Episodes API models ---
-data class EpisodesResponse(
-    val seasons: List<String>,             // e.g. ["Season 1", "Season 2", ...]
-    val episodes: List<EpisodeItem>,       // items for the selected season
-    val gName: String,                     // group/show name
-    val activeSeason: Int,                 // 1-based
-    val activeEpisodeIndex: Int            // 0-based (episode index in the list)
+data class totalSeasonResponse(
+    val tId: String,
+    val totalSeason: Int
 )
 
 data class EpisodeItem(
@@ -153,7 +153,8 @@ data class EpisodeItem(
     val tvTitle: String,
     val tvDuration: Int,
     val tvCvrUrl: String,
-    val tvDescription: String
+    val tvDescription: String,
+    val selectedEps: Int
 )
 
 interface ApiVideoDetails {
@@ -161,6 +162,11 @@ interface ApiVideoDetails {
     suspend fun getVideoDetails(
         @Query("code") code: String
     ): VideoDetailsResponse
+
+    @GET("gettotalseason")
+    suspend fun gettotalseason(
+        @Query("code") code: String
+    ): totalSeasonResponse
 
     @GET("gettvepisodes")
     suspend fun getEpisodes(
@@ -546,28 +552,81 @@ fun MainPlayerScreen(
     val episodesApi = ApiClient.create(ApiVideoDetails::class.java)
     var epLoading by remember { mutableStateOf(false) }
 
+    // season-related state
+    var epTotalSeasons by remember { mutableStateOf<Int?>(null) }   // unknown until API returns
+    var seasonPickerOpen by remember { mutableStateOf(false) }       // overlay for season list
+
+//    LaunchedEffect(showEpisodes, epSelectedSeason) {
+//        if (!showEpisodes) return@LaunchedEffect
+//        epLoading = true
+//        try {
+//            // returns List<EpisodeItem>
+//            val res = episodesApi.getEpisodes(
+//                code = vData!!.gId,
+//                season = epSelectedSeason
+//            )
+//
+//            // Map: mark the selected episode
+//            val selectedIndex = vData!!.tvOrder.coerceAtLeast(1)
+//            epList = res.mapIndexed { idx, ep ->
+//                ep.copy(selectedEps = if (idx + 1 == selectedIndex) 1 else 0)
+//            }
+//
+//            // Update your active index too
+//            epActiveIndex = (selectedIndex - 1).coerceIn(0, (epList.size - 1).coerceAtLeast(0))
+//
+//
+//            // mark selection using the *currently playing* episode
+//            val (mapped, idx) = markSelectedEpisode(res, currentCode /* or vData?.mId if that's episode id */)
+//            epList = mapped
+//            epActiveIndex = if (idx >= 0) idx else 0
+//
+//        } catch (e: Exception) {
+//            epList = emptyList()
+//            // Log.e("EpisodesDebug", "failed", e)
+//        } finally {
+//            epLoading = false
+//        }
+//    }
+
     LaunchedEffect(showEpisodes, epSelectedSeason) {
         if (!showEpisodes) return@LaunchedEffect
         epLoading = true
         try {
-            // returns List<EpisodeItem>
             val res = episodesApi.getEpisodes(
-                code = vData!!.gId,          // make sure this is the TV GROUP code your API expects
-                season = epSelectedSeason    // 1-based
+                code = vData!!.gId,
+                season = epSelectedSeason
             )
+
+            // ✅ trust the API’s selectedEps
             epList = res
-            // Optionally set active index from your current tvOrder
-            epActiveIndex = (vData!!.tvOrder.coerceAtLeast(1) - 1).coerceIn(0, (epList.size - 1).coerceAtLeast(0))
+
+            // ✅ compute the active index based on selectedEps first, then fall back to currentCode
+            val idxFromApi = res.indexOfFirst { it.selectedEps == 1 }
+            val idxFromId  = res.indexOfFirst { it.tvId == currentCode }
+            epActiveIndex = when {
+                idxFromApi >= 0 -> idxFromApi
+                idxFromId  >= 0 -> idxFromId
+                else            -> 0
+            }
         } catch (e: Exception) {
             epList = emptyList()
-            // Log.e("EpisodesDebug", "failed", e)
         } finally {
             epLoading = false
         }
     }
 
 
-
+    LaunchedEffect(showEpisodes) {
+        if (!showEpisodes) return@LaunchedEffect
+        try {
+            // call the endpoint you already declared in ApiVideoDetails
+            val r = episodesApi.gettotalseason(code = vData!!.gId)
+            epTotalSeasons = r.totalSeason.coerceAtLeast(1)
+        } catch (_: Exception) {
+            epTotalSeasons = 1 // fallback so UI still works
+        }
+    }
 
     // ──────────────────────────
     // UI (kept intact; just binds to variables from vData)
@@ -1081,18 +1140,26 @@ fun MainPlayerScreen(
                                     )
                                 }
 
-                                Text(
-                                    "Season $epSelectedSeason",
-                                    color = Color.White,
-                                    fontSize = 18.sp,
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(6.dp))
-                                        .background(Color(0xFF222222))
-                                        .clickable {
-
-                                        }
-                                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                                )
+                                        .background(Color(0xFF262626))
+                                        .clickable { seasonPickerOpen = true }
+                                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                                ) {
+                                    Text(
+                                        text = "Season $epSelectedSeason",
+                                        color = Color.White,
+                                        fontSize = if (isTablet) 16.sp else 14.sp
+                                    )
+                                    Icon(
+                                        imageVector = Icons.Filled.ArrowDropDown,
+                                        contentDescription = "Select Season",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(28.dp)
+                                    )
+                                }
                             }
 
                             //Spacer(Modifier.height(4.dp))
@@ -1102,22 +1169,45 @@ fun MainPlayerScreen(
                                     CircularProgressIndicator(color = Color.Red, strokeWidth = 4.dp)
                                 }
                             } else {
-                                var isBuffering by remember { mutableStateOf(false) }
+                                val listState = rememberLazyListState()
+                                LaunchedEffect(showEpisodes) {
+                                    if (showEpisodes && epActiveIndex >= 0) {
+                                        coroutineScope.launch {
+                                            delay(120)
+                                            listState.animateScrollToItem(epActiveIndex)
+                                        }
+                                    }
+                                }
+
+                                LaunchedEffect(epSelectedSeason, epList.size) {
+                                    if (showEpisodes && epList.isNotEmpty()) {
+                                        delay(120)
+                                        listState.animateScrollToItem(0)
+                                    }
+                                }
+
+                                // right before LazyRow
+                                val selectedIndex = epList.indexOfFirst { it.selectedEps != 0 }.takeIf { it >= 0 } ?: 0
+
+
                                 LazyRow(
+                                    state = listState,
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(horizontal = 0.dp),
                                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
-                                    items(epList) { ep ->
-                                        val isActive = (epList.indexOf(ep) == epActiveIndex)
+                                    itemsIndexed(epList) { idx, ep ->
+                                        //val isActive = (epList.indexOf(ep) == epActiveIndex)
+                                        val isActive = idx == selectedIndex
+                                        //Log.d("isActive rara", "isActives:  $ep.selectedEps")
 
                                         Box(
                                             modifier = Modifier
                                                 .width(200.dp)
                                                 .height(380.dp) // fixed card width
                                                 .clip(RoundedCornerShape(10.dp))
-                                                .background(if (isActive) Color(0xFF1E1E1E) else Color.Transparent)
+                                                .background(if (isActive) Color.DarkGray else Color.Transparent)
                                                 .clickable {
                                                     val next = ep.tvId
 
@@ -1142,6 +1232,9 @@ fun MainPlayerScreen(
 
                                                     // 🔥 this will automatically trigger your LaunchedEffect(currentCode)
                                                     currentCode = next
+
+                                                    epList = epList.map { it.copy(selectedEps = if (it.tvId == next) 1 else 0) }
+
 
                                                     exoPlayer.playWhenReady = true
                                                 }
@@ -1221,6 +1314,79 @@ fun MainPlayerScreen(
                                     }
                                 }
                             }
+
+                            if (seasonPickerOpen) {
+                                androidx.compose.ui.window.Dialog(onDismissRequest = { seasonPickerOpen = false }) {
+                                    // fullscreen dim
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(Color.Black.copy(alpha = 0.8f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        // center card
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(Color(0xFF111111))
+                                                .padding(vertical = 12.dp),
+                                            horizontalAlignment = Alignment.CenterHorizontally
+                                        ) {
+                                            // Build seasons list from total
+                                            val total = epTotalSeasons ?: 1
+                                            // Show as Season 1..N
+                                            repeat(total) { idx ->
+                                                val seasonNum = idx + 1
+                                                val selected = (seasonNum == epSelectedSeason)
+
+                                                Text(
+                                                    text = "Season $seasonNum",
+                                                    color = Color.White,
+                                                    fontSize = if (selected) 22.sp else 20.sp,
+                                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .clickable {
+                                                            if (epSelectedSeason != seasonNum) {
+                                                                // switch season: this will trigger your LaunchedEffect(showEpisodes, epSelectedSeason)
+                                                                epSelectedSeason = seasonNum
+                                                                // clear current list so loader shows (optional UX)
+                                                                epList = emptyList()
+
+                                                                // reset active index until API tells otherwise
+                                                                epActiveIndex = 0
+                                                            }
+                                                            seasonPickerOpen = false
+                                                        }
+                                                        .padding(horizontal = 24.dp, vertical = 10.dp),
+                                                    textAlign = TextAlign.Center
+                                                )
+                                            }
+
+                                            Spacer(Modifier.height(12.dp))
+
+                                            // Close button
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(44.dp)
+                                                    .clip(RoundedCornerShape(50))
+                                                    .background(Color.White)
+                                                    .clickable { seasonPickerOpen = false },
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.ArrowBack,
+                                                    contentDescription = "Close",
+                                                    tint = Color.Black,
+                                                    modifier = Modifier.size(24.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
 
                         }
                     }
@@ -1550,6 +1716,22 @@ private fun applySubtitleSelection(
         }
     }
 }
+
+///** Mark the selected episode by tvId. Returns (newList, selectedIndex). */
+//fun markSelectedEpisode(
+//    list: List<EpisodeItem>,
+//    selectedId: String?
+//): Pair<List<EpisodeItem>, Int> {
+//    if (list.isEmpty()) return list to -1
+//    var selIdx = -1
+//    val mapped = list.mapIndexed { idx, it ->
+//        val isSel = selectedId != null && it.tvId == selectedId
+//        if (isSel) selIdx = idx
+//        if (it.selectedEps != if (isSel) 1 else 0) it.copy(selectedEps = if (isSel) 1 else 0) else it
+//    }
+//    return mapped to selIdx
+//}
+
 
 
 
