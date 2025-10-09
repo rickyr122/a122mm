@@ -10,6 +10,7 @@ import android.os.Build
 import android.util.Log
 import android.view.View
 import android.view.WindowManager
+import android.widget.FrameLayout
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
@@ -96,8 +97,11 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
 import androidx.compose.ui.zIndex
 import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.AudioAttributes
@@ -1297,10 +1301,7 @@ fun MainPlayerScreen(
                             }
 
                             if (seasonPickerOpen) {
-                                Dialog(
-                                    onDismissRequest = { seasonPickerOpen = false },
-                                    properties = DialogProperties(usePlatformDefaultWidth = false)
-                                ) {
+                                FullScreenDialog(onDismissRequest = { seasonPickerOpen = false }) {
                                     Box(
                                         modifier = Modifier
                                             .fillMaxSize()
@@ -1696,20 +1697,50 @@ private fun applySubtitleSelection(
     }
 }
 
-///** Mark the selected episode by tvId. Returns (newList, selectedIndex). */
-//fun markSelectedEpisode(
-//    list: List<EpisodeItem>,
-//    selectedId: String?
-//): Pair<List<EpisodeItem>, Int> {
-//    if (list.isEmpty()) return list to -1
-//    var selIdx = -1
-//    val mapped = list.mapIndexed { idx, it ->
-//        val isSel = selectedId != null && it.tvId == selectedId
-//        if (isSel) selIdx = idx
-//        if (it.selectedEps != if (isSel) 1 else 0) it.copy(selectedEps = if (isSel) 1 else 0) else it
-//    }
-//    return mapped to selIdx
-//}
+@Composable
+fun FullScreenDialog(
+    onDismissRequest: () -> Unit,
+    content: @Composable () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismissRequest,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
+    ) {
+        // 🔑 Get the DIALOG window, not the Activity window
+        val dialogWindow = (LocalView.current.parent as DialogWindowProvider).window
+
+        // Configure the dialog window to be truly fullscreen
+        DisposableEffect(Unit) {
+            // draw behind system bars
+            WindowCompat.setDecorFitsSystemWindows(dialogWindow, false)
+            dialogWindow.setLayout(
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.MATCH_PARENT
+            )
+            dialogWindow.addFlags(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS)
+
+            // optionally hide bars while open
+            val controller = WindowInsetsControllerCompat(dialogWindow, dialogWindow.decorView)
+            controller.systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            controller.hide(WindowInsetsCompat.Type.systemBars())
+
+            onDispose {
+                // restore bars on close
+                controller.show(WindowInsetsCompat.Type.systemBars())
+                WindowCompat.setDecorFitsSystemWindows(dialogWindow, true)
+                dialogWindow.clearFlags(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS)
+            }
+        }
+
+        // your existing overlay content
+        content()
+    }
+}
+
 
 
 
