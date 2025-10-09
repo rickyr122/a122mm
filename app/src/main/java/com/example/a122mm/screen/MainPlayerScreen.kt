@@ -45,7 +45,9 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Forward10
@@ -92,6 +94,8 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.zIndex
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.ViewModel
@@ -556,38 +560,15 @@ fun MainPlayerScreen(
     var epTotalSeasons by remember { mutableStateOf<Int?>(null) }   // unknown until API returns
     var seasonPickerOpen by remember { mutableStateOf(false) }       // overlay for season list
 
-//    LaunchedEffect(showEpisodes, epSelectedSeason) {
-//        if (!showEpisodes) return@LaunchedEffect
-//        epLoading = true
-//        try {
-//            // returns List<EpisodeItem>
-//            val res = episodesApi.getEpisodes(
-//                code = vData!!.gId,
-//                season = epSelectedSeason
-//            )
-//
-//            // Map: mark the selected episode
-//            val selectedIndex = vData!!.tvOrder.coerceAtLeast(1)
-//            epList = res.mapIndexed { idx, ep ->
-//                ep.copy(selectedEps = if (idx + 1 == selectedIndex) 1 else 0)
-//            }
-//
-//            // Update your active index too
-//            epActiveIndex = (selectedIndex - 1).coerceIn(0, (epList.size - 1).coerceAtLeast(0))
-//
-//
-//            // mark selection using the *currently playing* episode
-//            val (mapped, idx) = markSelectedEpisode(res, currentCode /* or vData?.mId if that's episode id */)
-//            epList = mapped
-//            epActiveIndex = if (idx >= 0) idx else 0
-//
-//        } catch (e: Exception) {
-//            epList = emptyList()
-//            // Log.e("EpisodesDebug", "failed", e)
-//        } finally {
-//            epLoading = false
-//        }
-//    }
+    // When overlay opens, force the season to the one currently playing
+    LaunchedEffect(showEpisodes) {
+        if (showEpisodes) {
+            val currentSeason = vData?.sId?.coerceAtLeast(1) ?: 1
+            if (epSelectedSeason != currentSeason) {
+                epSelectedSeason = currentSeason    // this will trigger your fetch effect
+            }
+        }
+    }
 
     LaunchedEffect(showEpisodes, epSelectedSeason) {
         if (!showEpisodes) return@LaunchedEffect
@@ -1207,7 +1188,7 @@ fun MainPlayerScreen(
                                                 .width(200.dp)
                                                 .height(380.dp) // fixed card width
                                                 .clip(RoundedCornerShape(10.dp))
-                                                .background(if (isActive) Color.DarkGray else Color.Transparent)
+                                                .background(if (isActive) Color(0xFF1A1A1A)  else Color.Transparent)
                                                 .clickable {
                                                     val next = ep.tvId
 
@@ -1316,26 +1297,30 @@ fun MainPlayerScreen(
                             }
 
                             if (seasonPickerOpen) {
-                                androidx.compose.ui.window.Dialog(onDismissRequest = { seasonPickerOpen = false }) {
-                                    // fullscreen dim
+                                Dialog(
+                                    onDismissRequest = { seasonPickerOpen = false },
+                                    properties = DialogProperties(usePlatformDefaultWidth = false)
+                                ) {
                                     Box(
                                         modifier = Modifier
                                             .fillMaxSize()
                                             .background(Color.Black.copy(alpha = 0.8f)),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        // center card
+                                        val scrollState = rememberScrollState()
+
                                         Column(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .clip(RoundedCornerShape(12.dp))
-                                                .background(Color(0xFF111111))
+                                                .verticalScroll(scrollState)
+                                                .background(
+                                                    Color.Black.copy(alpha = 0.4f),
+                                                    RoundedCornerShape(12.dp)
+                                                )
                                                 .padding(vertical = 12.dp),
                                             horizontalAlignment = Alignment.CenterHorizontally
                                         ) {
-                                            // Build seasons list from total
                                             val total = epTotalSeasons ?: 1
-                                            // Show as Season 1..N
                                             repeat(total) { idx ->
                                                 val seasonNum = idx + 1
                                                 val selected = (seasonNum == epSelectedSeason)
@@ -1349,12 +1334,8 @@ fun MainPlayerScreen(
                                                         .fillMaxWidth()
                                                         .clickable {
                                                             if (epSelectedSeason != seasonNum) {
-                                                                // switch season: this will trigger your LaunchedEffect(showEpisodes, epSelectedSeason)
                                                                 epSelectedSeason = seasonNum
-                                                                // clear current list so loader shows (optional UX)
                                                                 epList = emptyList()
-
-                                                                // reset active index until API tells otherwise
                                                                 epActiveIndex = 0
                                                             }
                                                             seasonPickerOpen = false
@@ -1366,7 +1347,6 @@ fun MainPlayerScreen(
 
                                             Spacer(Modifier.height(12.dp))
 
-                                            // Close button
                                             Box(
                                                 modifier = Modifier
                                                     .size(44.dp)
@@ -1386,7 +1366,6 @@ fun MainPlayerScreen(
                                     }
                                 }
                             }
-
 
                         }
                     }

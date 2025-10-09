@@ -104,8 +104,6 @@ fun TvEpisodes(
                                 contentAlignment = Alignment.Center
                             ) {
                                 val scrollState = rememberScrollState()
-
-
                                 Column(
                                     modifier = Modifier
                                         .fillMaxWidth(1f)
