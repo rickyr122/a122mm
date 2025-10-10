@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -137,6 +138,7 @@ import kotlin.math.roundToInt
 
 data class VideoDetailsResponse(
     val gId: String,
+    val gName: String,
     val mId: String,
     val mTitle: String,
     val cFlareVid: String,
@@ -303,6 +305,7 @@ fun MainPlayerScreen(
     val progress = vData!!.cProgress
     val tTitle = vData!!.mTitle.fixEncoding()
     val nextId = vData!!.nextTvId
+    val gName = vData!!.gName
 
     val externalSubUrl = subtitleUrl.trim()
     val hasExternalSrt = externalSubUrl.isNotEmpty()
@@ -1125,25 +1128,45 @@ fun MainPlayerScreen(
                                     )
                                 }
 
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(Color(0xFF262626))
-                                        .clickable { seasonPickerOpen = true }
-                                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                                ) {
-                                    Text(
-                                        text = "Season $epSelectedSeason",
-                                        color = Color.White,
-                                        fontSize = if (isTablet) 16.sp else 14.sp
-                                    )
-                                    Icon(
-                                        imageVector = Icons.Filled.ArrowDropDown,
-                                        contentDescription = "Select Season",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(28.dp)
-                                    )
+                                if (epTotalSeasons == 1) {
+                                    Spacer(modifier = Modifier.weight(1f))
+
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier
+                                            .padding(vertical = 8.dp)
+                                    ) {
+                                        // LEFT: Show group name if only 1 season
+                                        Text(
+                                            text = gName.replace("`", "'"),
+                                            color = Color.White,
+                                            fontSize = if (isTablet) 18.sp else 16.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis, // Truncate long text
+                                        )
+                                    }
+                                } else {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(Color(0xFF262626))
+                                            .clickable { seasonPickerOpen = true }
+                                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                                    ) {
+                                        Text(
+                                            text = "Season $epSelectedSeason",
+                                            color = Color.White,
+                                            fontSize = if (isTablet) 16.sp else 14.sp
+                                        )
+                                        Icon(
+                                            imageVector = Icons.Filled.ArrowDropDown,
+                                            contentDescription = "Select Season",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(28.dp)
+                                        )
+                                    }
                                 }
                             }
 
@@ -1186,11 +1209,12 @@ fun MainPlayerScreen(
                                         //val isActive = (epList.indexOf(ep) == epActiveIndex)
                                         val isActive = idx == selectedIndex
                                         //Log.d("isActive rara", "isActives:  $ep.selectedEps")
-
+                                        val cardWidth = if (isTablet) 250.dp else 200.dp
                                         Box(
                                             modifier = Modifier
-                                                .width(200.dp)
-                                                .height(380.dp) // fixed card width
+                                                .width(cardWidth)
+                                                //.height(380.dp) // fixed card width
+                                                .fillMaxHeight()
                                                 .clip(RoundedCornerShape(10.dp))
                                                 .background(if (isActive) Color(0xFF1A1A1A)  else Color.Transparent)
                                                 .clickable {
@@ -1239,8 +1263,8 @@ fun MainPlayerScreen(
                                                         .fillMaxWidth()
                                                         .clip(RoundedCornerShape(10.dp))
                                                 )
-                                                Spacer(Modifier.height(4.dp))
-
+                                                Spacer(Modifier.height(6.dp))
+                                                val tabSpacer = if (isTablet) 4.dp else 2.dp
                                                 // title
                                                 Box(
                                                     modifier = Modifier
@@ -1271,7 +1295,7 @@ fun MainPlayerScreen(
                                                         horizontal = 4.dp
                                                     )
                                                 )
-                                                Spacer(Modifier.height(2.dp))
+                                                Spacer(Modifier.height(tabSpacer))
                                                 // duration
                                                 Text(
                                                     text = formatDurationFromMinutes(ep.tvDuration),
@@ -1282,14 +1306,14 @@ fun MainPlayerScreen(
                                                         end = 4.dp
                                                     )
                                                 )
-                                                Spacer(Modifier.height(2.dp))
+                                                Spacer(Modifier.height(tabSpacer))
                                                 // description
                                                 Text(
                                                     text = ep.tvDescription.fixEncoding(),
                                                     color = Color.LightGray,
                                                     fontSize = 13.sp,
                                                     lineHeight = 18.sp,
-                                                    overflow = TextOverflow.Clip, // no ellipsis
+                                                    overflow = TextOverflow.Ellipsis, // no ellipsis
                                                     modifier = Modifier
                                                         .padding(4.dp)
                                                         .weight(1f, fill = true)   // let it take remaining space
