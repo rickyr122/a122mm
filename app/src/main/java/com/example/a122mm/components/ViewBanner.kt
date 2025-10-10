@@ -58,6 +58,8 @@ import retrofit2.http.FormUrlEncoded
 import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Query
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 
 data class BannerResponse(
     val mId: String,
@@ -84,6 +86,7 @@ interface ApiService {
     @POST("addmylist")
     suspend fun addToMyList(
         @Field("mId") mId: String,
+        @Field("client_time") clientTime: String
     ): retrofit2.Response<Unit>
 
     @FormUrlEncoded
@@ -314,7 +317,11 @@ fun ViewBanner(
                                                 val response = if (isCurrentlyInList) {
                                                     api.removeFromMyList(banner.mId)
                                                 } else {
-                                                    api.addToMyList(banner.mId)
+                                                    val clientTime = LocalDateTime.now()
+                                                        .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+
+
+                                                    api.addToMyList(banner.mId, clientTime)
                                                 }
 
                                                 if (response.isSuccessful) {
@@ -326,6 +333,7 @@ fun ViewBanner(
                                                         put("bdropUrl", banner.bdropUrl)
                                                         put("logoUrl", banner.logoUrl)
                                                         put("inList", newInListValue)
+                                                        put("playId", banner.playId)
                                                         put("cProgress", banner.cProgress)
                                                         put("cFlareVid", banner.cFlareVid)
                                                         put("cFlareSrt", banner.cFlareSrt)

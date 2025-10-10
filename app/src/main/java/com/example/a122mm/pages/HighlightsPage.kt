@@ -68,6 +68,8 @@ import retrofit2.http.FormUrlEncoded
 import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Query
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 
 // ===== API DTO from backend =====
 // Keep only what you need to render. Add fields later if needed.
@@ -90,7 +92,10 @@ interface HighlightsApi {
 
     @FormUrlEncoded
     @POST("addmylist")
-    suspend fun addToMyList(@Field("mId") mId: String): Response<Unit>
+    suspend fun addToMyList(
+        @Field("mId") mId: String,
+        @Field("client_time") clientTime: String
+    ): Response<Unit>
 
     @FormUrlEncoded
     @POST("removemylist")
@@ -494,9 +499,13 @@ private fun HighlightCard(
                             val nextValue = if (currentlyIn) "0" else "1"
 
                             scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                val clientTime = LocalDateTime.now()
+                                    .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
                                 val resp = try {
-                                    if (currentlyIn) myListApi.removeFromMyList(item.mId)
-                                    else myListApi.addToMyList(item.mId)
+                                    if (currentlyIn)
+                                        myListApi.removeFromMyList(item.mId)
+                                    else
+                                        myListApi.addToMyList(item.mId, clientTime)
                                 } catch (_: Throwable) { null }
 
                                 if (resp?.isSuccessful == true) {

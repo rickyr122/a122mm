@@ -103,6 +103,8 @@ import retrofit2.http.FormUrlEncoded
 import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Query
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 
 // --- Data class for API result
 data class MovieDetail(
@@ -173,6 +175,7 @@ interface MovieApiService {
     @POST("addmylist")
     suspend fun addToMyList(
         @Field("mId") mId: String,
+        @Field("client_time") clientTime: String
     ): retrofit2.Response<Unit>
 
     @FormUrlEncoded
@@ -790,9 +793,13 @@ fun MovieDetailContent(
                                     scope.launch(Dispatchers.IO) {
                                         try {
                                             val isCurrentlyInList = movieInList == "1"
+                                            val clientTime = LocalDateTime.now()
+                                                .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
                                             val newValue = if (isCurrentlyInList) "0" else "1"
-                                            val response = if (isCurrentlyInList) api.removeFromMyList(sId)
-                                            else api.addToMyList(sId)
+                                            val response = if (isCurrentlyInList)
+                                                                api.removeFromMyList(sId)
+                                                           else
+                                                               api.addToMyList(sId,clientTime)
 
                                             if (response.isSuccessful) {
                                                 withContext(Dispatchers.Main) {
