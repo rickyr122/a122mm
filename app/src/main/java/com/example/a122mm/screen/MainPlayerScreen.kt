@@ -465,7 +465,7 @@ fun MainPlayerScreen(
         if (!showEndButtons || creditsMode) return@LaunchedEffect
         nextFill = 0f
         nextAnimRunning = true
-        val totalMs = 3000L
+        val totalMs = 10000L
         val stepMs = 40L
         val steps = (totalMs / stepMs).toInt().coerceAtLeast(1)
         repeat(steps) {
@@ -478,13 +478,21 @@ fun MainPlayerScreen(
         }
     }
 
+    // Start visible on first load; then auto-hide behavior kicks in
+    val isControlsVisible = remember { mutableStateOf(true) }
+    var autoHideEnabled by remember { mutableStateOf(false) }
 
-
+    LaunchedEffect(showEndButtons) {
+        if (showEndButtons) {
+            isControlsVisible.value = false
+            autoHideEnabled = false
+        } else {
+            autoHideEnabled = true
+        }
+    }
 
     LaunchedEffect(exoPlayer.audioSessionId) { /* hook for audio FX if needed */ }
     RememberAndAttachAudioEffects(exoPlayer)
-
-
 
     LaunchedEffect(exoPlayer) {
         while (duration.value <= 1L) {
@@ -570,9 +578,7 @@ fun MainPlayerScreen(
 
 
 
-    // Start visible on first load; then auto-hide behavior kicks in
-    val isControlsVisible = remember { mutableStateOf(true) }
-    var autoHideEnabled by remember { mutableStateOf(false) }
+
 
     var allowControlsWhileLoading by remember { mutableStateOf(false) }
     var suppressSpinner by remember { mutableStateOf(false) }
@@ -595,8 +601,10 @@ fun MainPlayerScreen(
                     Player.STATE_READY -> {
                         isLoading.value = false
                         // Show controls on first load, then enable auto-hide behavior.
-                        isControlsVisible.value = true
-                        autoHideEnabled = true
+                        if (!showEndButtons) {
+                            isControlsVisible.value = true
+                            autoHideEnabled = true
+                        }
                         suppressSpinner = false
                         allowControlsWhileLoading = false
                     }
@@ -693,11 +701,11 @@ fun MainPlayerScreen(
             .fillMaxSize()
             .background(Color.Black)
             .clickable(
+                enabled = !showEndButtons,
                 indication = null,
                 interactionSource = remember { MutableInteractionSource() }
             ) {
                 isControlsVisible.value = !isControlsVisible.value
-
                 if (isLoading.value && isControlsVisible.value) {
                     allowControlsWhileLoading = true
                 }
@@ -789,7 +797,22 @@ fun MainPlayerScreen(
             enter = fadeIn() + scaleIn(),
             exit = fadeOut() + scaleOut()
         ) {
-            Box(Modifier.fillMaxSize()) {
+            Box(Modifier
+                .fillMaxSize()
+                .pointerInput(showEndButtons) {
+                    detectTapGestures(
+                        onTap = {
+                            if (showEndButtons) {
+                                // swallow tap: do nothing while credit/next buttons shown
+                                return@detectTapGestures
+                            }
+                            // normal toggle
+                            isControlsVisible.value = !isControlsVisible.value
+                            autoHideEnabled = isControlsVisible.value
+                        }
+                    )
+                }
+            ) {
                 Row(
                     modifier = Modifier.align(Alignment.Center),
                     verticalAlignment = Alignment.CenterVertically,
