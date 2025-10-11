@@ -78,6 +78,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
@@ -306,6 +307,7 @@ fun MainPlayerScreen(
     val tTitle = vData!!.mTitle.fixEncoding()
     val nextId = vData!!.nextTvId
     val gName = vData!!.gName
+    val crStartSec = vData!!.crTime
 
     val externalSubUrl = subtitleUrl.trim()
     val hasExternalSrt = externalSubUrl.isNotEmpty()
@@ -332,7 +334,7 @@ fun MainPlayerScreen(
         }
     }
 
-    // TrackSelector respects your external SRT rule
+        // TrackSelector respects your external SRT rule
     val trackSelector = remember(hasExternalSrt) {
         DefaultTrackSelector(context).apply {
             setParameters(
@@ -415,13 +417,74 @@ fun MainPlayerScreen(
             }
     }
 
-    LaunchedEffect(exoPlayer.audioSessionId) { /* hook for audio FX if needed */ }
-    RememberAndAttachAudioEffects(exoPlayer)
+    val scope = rememberCoroutineScope()
+    val isLoading = remember { mutableStateOf(true) }
+    val isPlayingState = remember { mutableStateOf(exoPlayer.isPlaying) }
+
+    var showEndButtons by remember { mutableStateOf(false) }
+    var nextFill by remember { mutableStateOf(0f) }          // 0f..1f fill from left→right
+    var nextAnimRunning by remember { mutableStateOf(false) }
 
     val currentPosition = remember { mutableStateOf(0L) }
     val duration = remember { mutableStateOf(1L) }
     val isSeeking = remember { mutableStateOf(false) }
     val seekPosition = remember { mutableStateOf(0f) }
+
+    var creditsMode by remember { mutableStateOf(false) } // when true, keep buttons hidden until STATE_ENDED
+
+    fun goToNextEpisode() {
+        val next = vData?.nextTvId.orEmpty()
+        if (next.isBlank()) return
+        try { exoPlayer.stop() } catch (_: Throwable) {}
+        vData = null                  // show spinner
+        currentCode = next            // triggers LaunchedEffect(currentCode)
+    }
+
+    LaunchedEffect(currentPosition.value, duration.value, nextId, crStartSec, isLoading.value, creditsMode) {
+        if (creditsMode) return@LaunchedEffect               // ⬅️ important
+        if (duration.value <= 0L || isLoading.value) return@LaunchedEffect
+
+        val remainingMs = (duration.value - currentPosition.value).coerceAtLeast(0L)
+        val triggerMs = crStartSec.coerceAtLeast(0) * 1000L
+        val shouldShow = nextId.isNotBlank() &&
+                remainingMs in 1..triggerMs &&
+                exoPlayer.playWhenReady &&
+                exoPlayer.playbackState == Player.STATE_READY
+
+        if (shouldShow && !showEndButtons) {
+            showEndButtons = true
+        } else if (!shouldShow && showEndButtons) {
+            showEndButtons = false
+            nextAnimRunning = false
+            nextFill = 0f
+        }
+    }
+
+
+    LaunchedEffect(showEndButtons, creditsMode) {
+        if (!showEndButtons || creditsMode) return@LaunchedEffect
+        nextFill = 0f
+        nextAnimRunning = true
+        val totalMs = 3000L
+        val stepMs = 40L
+        val steps = (totalMs / stepMs).toInt().coerceAtLeast(1)
+        repeat(steps) {
+            if (!nextAnimRunning || creditsMode) return@LaunchedEffect
+            nextFill = (it + 1) / steps.toFloat()
+            delay(stepMs)
+        }
+        if (nextAnimRunning && !creditsMode) {
+            goToNextEpisode()
+        }
+    }
+
+
+
+
+    LaunchedEffect(exoPlayer.audioSessionId) { /* hook for audio FX if needed */ }
+    RememberAndAttachAudioEffects(exoPlayer)
+
+
 
     LaunchedEffect(exoPlayer) {
         while (duration.value <= 1L) {
@@ -505,8 +568,7 @@ fun MainPlayerScreen(
         }
     })
 
-    val isLoading = remember { mutableStateOf(true) }
-    val isPlayingState = remember { mutableStateOf(exoPlayer.isPlaying) }
+
 
     // Start visible on first load; then auto-hide behavior kicks in
     val isControlsVisible = remember { mutableStateOf(true) }
@@ -538,7 +600,14 @@ fun MainPlayerScreen(
                         suppressSpinner = false
                         allowControlsWhileLoading = false
                     }
-                    Player.STATE_ENDED -> navController.popBackStack()
+                    Player.STATE_ENDED -> {
+                        if (vData?.nextTvId.orEmpty().isNotBlank()) {
+                            creditsMode = false
+                            goToNextEpisode()
+                        } else {
+                            navController.popBackStack()
+                        }
+                    }
                 }
             }
             override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -672,8 +741,7 @@ fun MainPlayerScreen(
 
         // Title (now from API)
         AnimatedVisibility(
-            visible = isControlsVisible.value && (!isLoading.value || suppressSpinner || allowControlsWhileLoading)
-,
+            visible = isControlsVisible.value && (!isLoading.value || suppressSpinner || allowControlsWhileLoading),
             enter = fadeIn() + slideInVertically(initialOffsetY = { -100 }),
             exit = fadeOut() + slideOutVertically(targetOffsetY = { -100 })
         ) {
@@ -692,8 +760,7 @@ fun MainPlayerScreen(
 
         // Back
         AnimatedVisibility(
-            visible = isControlsVisible.value && (!isLoading.value || suppressSpinner || allowControlsWhileLoading)
-,
+            visible = isControlsVisible.value && (!isLoading.value || suppressSpinner || allowControlsWhileLoading),
             enter = fadeIn() + slideInVertically(initialOffsetY = { -100 }),
             exit = fadeOut() + slideOutVertically(targetOffsetY = { -100 })
         ) {
@@ -718,8 +785,7 @@ fun MainPlayerScreen(
 
         // Center controls
         AnimatedVisibility(
-            visible = isControlsVisible.value && (!isLoading.value || suppressSpinner || allowControlsWhileLoading)
-,
+            visible = isControlsVisible.value && (!isLoading.value || suppressSpinner || allowControlsWhileLoading),
             enter = fadeIn() + scaleIn(),
             exit = fadeOut() + scaleOut()
         ) {
@@ -799,8 +865,7 @@ fun MainPlayerScreen(
 
         // Bottom: slider + time + (buttons)
         AnimatedVisibility(
-            visible = isControlsVisible.value && (!isLoading.value || suppressSpinner || allowControlsWhileLoading)
-,
+            visible = isControlsVisible.value && (!isLoading.value || suppressSpinner || allowControlsWhileLoading),
             enter = fadeIn() + slideInVertically(initialOffsetY = { 100 }),
             exit = fadeOut() + slideOutVertically(targetOffsetY = { 100 })
         ) {
@@ -1391,7 +1456,6 @@ fun MainPlayerScreen(
                                     }
                                 }
                             }
-
                         }
                     }
                 }
@@ -1481,6 +1545,8 @@ fun MainPlayerScreen(
                                 textAlign = TextAlign.Center
                             )
                         }
+
+
                     }
 
 
@@ -1522,6 +1588,45 @@ fun MainPlayerScreen(
                         )
                     }
                 }
+            }
+        }
+
+        if (showEndButtons) {
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)   // ✅ works here
+                    .navigationBarsPadding()
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFF3A3A3A))
+                        .clickable {
+                            // enter credits mode: hide buttons and stop auto-fill
+                            creditsMode = true
+                            nextAnimRunning = false
+                            nextFill = 0f
+                            showEndButtons = false
+                            // keep playing to the end
+                            exoPlayer.playWhenReady = true
+                        }
+                        .padding(horizontal = 16.dp, vertical = 10.dp)
+                ) {
+                    Text("Watch Credits", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                }
+
+                NextAutoButton(
+                    label = "Next Episode",
+                    fill01 = nextFill,
+                    onClick = {
+                        creditsMode = false
+                        nextAnimRunning = false
+                        goToNextEpisode()
+                    }
+                )
             }
         }
 
@@ -1765,8 +1870,42 @@ fun FullScreenDialog(
     }
 }
 
+@Composable
+private fun NextAutoButton(
+    label: String,
+    fill01: Float,                 // 0f..1f
+    onClick: () -> Unit
+) {
+    val shape = RoundedCornerShape(12.dp)
+    val clamped = fill01.coerceIn(0f, 1f)
 
-
-
-
-
+    Box(
+        modifier = Modifier
+            .clip(shape)
+            .background(Color(0xFF3A3A3A)) // base gray
+            .drawBehind {
+                // draw the white fill from left→right within the button's own size
+                drawRoundRect(
+                    color = Color.White,
+                    size = androidx.compose.ui.geometry.Size(
+                        width = size.width * clamped,
+                        height = size.height
+                    ),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(
+                        x = 12.dp.toPx(),
+                        y = 12.dp.toPx()
+                    )
+                )
+            }
+            .clickable { onClick() }
+            .padding(horizontal = 16.dp, vertical = 10.dp) // sets the intrinsic height
+    ) {
+        val textColor = if (clamped >= 0.55f) Color.Black else Color.White
+        Text(
+            text = label,
+            color = textColor,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+    }
+}
