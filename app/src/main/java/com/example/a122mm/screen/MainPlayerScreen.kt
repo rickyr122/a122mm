@@ -805,56 +805,51 @@ fun MainPlayerScreen(
         }
 
         // Back (always on top of overlay/clickable surface)
-        AnimatedVisibility(
-            visible = isControlsVisible.value && (!isLoading.value || suppressSpinner || allowControlsWhileLoading),
-            enter = fadeIn() + slideInVertically(initialOffsetY = { -100 }),
-            exit  = fadeOut() + slideOutVertically(targetOffsetY = { -100 })
-        ) {
+        // Replace your AnimatedVisibility for the back button with this:
+//        AnimatedVisibility(
+//            visible = isControlsVisible.value && (!isLoading.value || suppressSpinner || allowControlsWhileLoading),
+//            enter = slideInVertically(initialOffsetY = { -150 }) + fadeIn(),
+//            exit = slideOutVertically(targetOffsetY = { -150 }) + fadeOut()
+//        ) {
 //            Box(
 //                modifier = Modifier
-//                    .fillMaxSize()
-//                    .zIndex(3f) // above everything
-//            ) {
-//                // Tap handler that CONSUMES the event so the full-screen toggle layer can’t see it
-//                Box(
-//                    modifier = Modifier
-//                        .align(Alignment.TopStart)
-//                        .padding(16.dp)
-//                        .size(64.dp)
-//                        .pointerInput(Unit) {
-//                            awaitEachGesture {
-//                                val down = awaitFirstDown()   // finger down
-//                                down.consume()                // ← critical: stop propagation
-//                                val up = waitForUpOrCancellation()
-//                                if (up != null) {
-//                                    when {
-//                                        showEpisodes -> {
-//                                            showEpisodes = false
-//                                            autoHideEnabled = true
-//                                            exoPlayer.playWhenReady = true
-//                                        }
-//                                        showSubtitleMenu -> {
-//                                            showSubtitleMenu = false
-//                                            autoHideEnabled = true
-//                                            exoPlayer.playWhenReady = true
-//                                        }
-//                                        else -> {
-//                                            navController.popBackStack()
-//                                        }
+//                    .align(Alignment.TopStart)
+//                    .padding(start = 12.dp, top = 4.dp)
+//                    .size(42.dp)
+//                    .pointerInput(Unit) {
+//                        awaitEachGesture {
+//                            val down = awaitFirstDown()
+//                            down.consume()
+//                            val up = waitForUpOrCancellation()
+//                            if (up != null) {
+//                                when {
+//                                    showEpisodes -> {
+//                                        showEpisodes = false
+//                                        autoHideEnabled = true
+//                                        exoPlayer.playWhenReady = true
 //                                    }
+//                                    showSubtitleMenu -> {
+//                                        showSubtitleMenu = false
+//                                        autoHideEnabled = true
+//                                        exoPlayer.playWhenReady = true
+//                                    }
+//                                    else -> navController.popBackStack()
 //                                }
 //                            }
 //                        }
-//                ) {
-//                    Icon(
-//                        imageVector = Icons.Default.ArrowBack,
-//                        contentDescription = "Back",
-//                        tint = Color.White,
-//                        modifier = Modifier.size(64.dp)
-//                    )
-//                }
+//                    }
+//            ) {
+//                Icon(
+//                    imageVector = Icons.Default.ArrowBack,
+//                    contentDescription = "Back",
+//                    tint = Color.White,
+//                    modifier = Modifier
+//                        .fillMaxSize()
+//                        .padding(4.dp)
+//                )
 //            }
-        }
+//        }
+
 
 
 
@@ -865,6 +860,14 @@ fun MainPlayerScreen(
         val replayScale by animateFloatAsState(if (isReplayPressed) 1.2f else 1f, label = "replayScale")
         var isForwardPressed by remember { mutableStateOf(false) }
         val forwardScale by animateFloatAsState(if (isForwardPressed) 1.2f else 1f, label = "forwardScale")
+
+        val backSize = 42.dp
+        val backPadStart = 12.dp
+        val backPadTop = 4.dp
+
+        val density = LocalDensity.current
+        val backRightPx  = with(density) { (backPadStart + backSize).toPx() }
+        val backBottomPx = with(density) { (backPadTop   + backSize).toPx() }
 
         // Center controls
         AnimatedVisibility(
@@ -958,15 +961,68 @@ fun MainPlayerScreen(
                         Icon(Icons.Default.Forward10, contentDescription = null, tint = Color.White, modifier = Modifier.fillMaxSize())
                     }
                 }
+//                Box(
+//                    modifier = Modifier
+//                        .align(Alignment.TopStart)
+//                        .padding(start = 12.dp, top = 4.dp)
+//                        .size(42.dp)
+//                        .animateEnterExit(                       // ⬅️ per-button animation
+//                            enter = slideInVertically { -120 } + fadeIn(),
+//                            exit  = slideOutVertically { -120 } + fadeOut()
+//                        )
+//                        .pointerInput(Unit) {
+//                            awaitEachGesture {
+//                                val down = awaitFirstDown()
+//                                down.consume()
+//                                val up = waitForUpOrCancellation()
+//                                if (up != null) {
+//                                    when {
+//                                        showEpisodes -> {
+//                                            showEpisodes = false
+//                                            autoHideEnabled = true
+//                                            exoPlayer.playWhenReady = true
+//                                        }
+//                                        showSubtitleMenu -> {
+//                                            showSubtitleMenu = false
+//                                            autoHideEnabled = true
+//                                            exoPlayer.playWhenReady = true
+//                                        }
+//                                        else -> navController.popBackStack()
+//                                    }
+//                                }
+//                            }
+//                        }
+//                ) {
+//                    Icon(
+//                        imageVector = Icons.Default.ArrowBack,
+//                        contentDescription = "Back",
+//                        tint = Color.White,
+//                        modifier = Modifier.fillMaxSize().padding(4.dp)
+//                    )
+//                }
+
+            }
+        }
+
+        AnimatedVisibility(
+            visible = isControlsVisible.value && (!isLoading.value || suppressSpinner || allowControlsWhileLoading),
+            enter = slideInVertically(initialOffsetY = { -120 }) + fadeIn(),
+            exit  = slideOutVertically(targetOffsetY  = { -120 }) + fadeOut()
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .zIndex(3f) // make sure it's over the center tap layer
+            ) {
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopStart)
-                        .padding(start = 12.dp, top = 4.dp) // ⬅️ move closer to the screen edge
-                        .size(42.dp)
+                        .padding(start = backPadStart, top = backPadTop)
+                        .size(backSize)
                         .pointerInput(Unit) {
                             awaitEachGesture {
                                 val down = awaitFirstDown()
-                                down.consume()
+                                down.consume() // ← eat it so nothing underneath toggles HUD
                                 val up = waitForUpOrCancellation()
                                 if (up != null) {
                                     when {
@@ -990,13 +1046,12 @@ fun MainPlayerScreen(
                         imageVector = Icons.Default.ArrowBack,
                         contentDescription = "Back",
                         tint = Color.White,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(4.dp) // ⬅️ slight inner padding for breathing room
+                        modifier = Modifier.fillMaxSize().padding(4.dp)
                     )
                 }
             }
         }
+
 
         // Bottom: slider + time + (buttons)
         AnimatedVisibility(
