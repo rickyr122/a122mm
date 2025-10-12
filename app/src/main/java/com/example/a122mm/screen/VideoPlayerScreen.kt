@@ -411,6 +411,10 @@ fun VideoPlayerScreen(
                             isSeeking.value = true
                             seekPosition.value = it
                         },
+                        onSeekStart = {                     // ⬅️ new callback
+                            //autoHideEnabled = false         // stop auto-hide during drag
+                            isControlsVisible.value = true  // make sure HUD is visible
+                        },
                         onSeekFinished = {
                             val newPos = (seekPosition.value * duration.value).toLong()
                             exoPlayer.seekTo(newPos)

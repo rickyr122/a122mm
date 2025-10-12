@@ -22,7 +22,10 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -700,16 +703,16 @@ fun MainPlayerScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
-            .clickable(
-                enabled = !showEndButtons,
-                indication = null,
-                interactionSource = remember { MutableInteractionSource() }
-            ) {
-                isControlsVisible.value = !isControlsVisible.value
-                if (isLoading.value && isControlsVisible.value) {
-                    allowControlsWhileLoading = true
-                }
-            }
+//            .clickable(
+//                enabled = !showEndButtons,
+//                indication = null,
+//                interactionSource = remember { MutableInteractionSource() }
+//            ) {
+//                isControlsVisible.value = !isControlsVisible.value
+//                if (isLoading.value && isControlsVisible.value) {
+//                    allowControlsWhileLoading = true
+//                }
+//            }
     ) {
         // Player surface
         AndroidView(
@@ -747,6 +750,41 @@ fun MainPlayerScreen(
             )
         }
 
+        // A) When HUD is HIDDEN → tap anywhere to SHOW
+        if (!isControlsVisible.value && !showEndButtons) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .zIndex(1f) // above PlayerView, below all HUD controls
+                    .pointerInput(Unit) {
+                        detectTapGestures(onTap = {
+                            isControlsVisible.value = true
+                            autoHideEnabled = true
+                            if (isLoading.value) allowControlsWhileLoading = true
+                        })
+                    }
+            )
+        }
+
+//        // B) When HUD is VISIBLE → tap empty area to HIDE
+//        if (isControlsVisible.value && (!isLoading.value || suppressSpinner || allowControlsWhileLoading)) {
+//            Box(
+//                Modifier
+//                    .fillMaxSize()
+//                    .zIndex(1f) // above PlayerView, but BELOW the buttons/back arrow
+//                    .pointerInput(showEndButtons) {
+//                        detectTapGestures(onTap = {
+//                            if (!showEndButtons) {
+//                                isControlsVisible.value = false
+//                                autoHideEnabled = false
+//                            }
+//                        }
+//                        )
+//                    }
+//            )
+//        }
+
+
         // Title (now from API)
         AnimatedVisibility(
             visible = isControlsVisible.value && (!isLoading.value || suppressSpinner || allowControlsWhileLoading),
@@ -766,22 +804,59 @@ fun MainPlayerScreen(
             }
         }
 
-        // Back
+        // Back (always on top of overlay/clickable surface)
         AnimatedVisibility(
             visible = isControlsVisible.value && (!isLoading.value || suppressSpinner || allowControlsWhileLoading),
             enter = fadeIn() + slideInVertically(initialOffsetY = { -100 }),
-            exit = fadeOut() + slideOutVertically(targetOffsetY = { -100 })
+            exit  = fadeOut() + slideOutVertically(targetOffsetY = { -100 })
         ) {
-            Box(Modifier.fillMaxSize()) {
-                IconButton(
-                    onClick = { navController.popBackStack() },
-                    modifier = Modifier.align(Alignment.TopStart).padding(16.dp)
-                ) {
-                    Icon(Icons.Default.ArrowBack, contentDescription = "Back",
-                        tint = Color.White, modifier = Modifier.size(64.dp))
-                }
-            }
+//            Box(
+//                modifier = Modifier
+//                    .fillMaxSize()
+//                    .zIndex(3f) // above everything
+//            ) {
+//                // Tap handler that CONSUMES the event so the full-screen toggle layer can’t see it
+//                Box(
+//                    modifier = Modifier
+//                        .align(Alignment.TopStart)
+//                        .padding(16.dp)
+//                        .size(64.dp)
+//                        .pointerInput(Unit) {
+//                            awaitEachGesture {
+//                                val down = awaitFirstDown()   // finger down
+//                                down.consume()                // ← critical: stop propagation
+//                                val up = waitForUpOrCancellation()
+//                                if (up != null) {
+//                                    when {
+//                                        showEpisodes -> {
+//                                            showEpisodes = false
+//                                            autoHideEnabled = true
+//                                            exoPlayer.playWhenReady = true
+//                                        }
+//                                        showSubtitleMenu -> {
+//                                            showSubtitleMenu = false
+//                                            autoHideEnabled = true
+//                                            exoPlayer.playWhenReady = true
+//                                        }
+//                                        else -> {
+//                                            navController.popBackStack()
+//                                        }
+//                                    }
+//                                }
+//                            }
+//                        }
+//                ) {
+//                    Icon(
+//                        imageVector = Icons.Default.ArrowBack,
+//                        contentDescription = "Back",
+//                        tint = Color.White,
+//                        modifier = Modifier.size(64.dp)
+//                    )
+//                }
+//            }
         }
+
+
 
         val coroutineScope = rememberCoroutineScope()
         var isPlayPressed by remember { mutableStateOf(false) }
@@ -802,13 +877,13 @@ fun MainPlayerScreen(
                 .pointerInput(showEndButtons) {
                     detectTapGestures(
                         onTap = {
-                            if (showEndButtons) {
-                                // swallow tap: do nothing while credit/next buttons shown
-                                return@detectTapGestures
-                            }
-                            // normal toggle
+                            if (showEndButtons) return@detectTapGestures
                             isControlsVisible.value = !isControlsVisible.value
                             autoHideEnabled = isControlsVisible.value
+
+                            // normal toggle
+//                            isControlsVisible.value = !isControlsVisible.value
+//                            autoHideEnabled = isControlsVisible.value
                         }
                     )
                 }
@@ -883,6 +958,43 @@ fun MainPlayerScreen(
                         Icon(Icons.Default.Forward10, contentDescription = null, tint = Color.White, modifier = Modifier.fillMaxSize())
                     }
                 }
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(start = 12.dp, top = 4.dp) // ⬅️ move closer to the screen edge
+                        .size(42.dp)
+                        .pointerInput(Unit) {
+                            awaitEachGesture {
+                                val down = awaitFirstDown()
+                                down.consume()
+                                val up = waitForUpOrCancellation()
+                                if (up != null) {
+                                    when {
+                                        showEpisodes -> {
+                                            showEpisodes = false
+                                            autoHideEnabled = true
+                                            exoPlayer.playWhenReady = true
+                                        }
+                                        showSubtitleMenu -> {
+                                            showSubtitleMenu = false
+                                            autoHideEnabled = true
+                                            exoPlayer.playWhenReady = true
+                                        }
+                                        else -> navController.popBackStack()
+                                    }
+                                }
+                            }
+                        }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ArrowBack,
+                        contentDescription = "Back",
+                        tint = Color.White,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(4.dp) // ⬅️ slight inner padding for breathing room
+                    )
+                }
             }
         }
 
@@ -924,17 +1036,25 @@ fun MainPlayerScreen(
                                     seekPosition.value = it
                                     isControlsVisible.value = true // keep HUD alive while dragging
                                 },
+                                onSeekStart = {                     // ⬅️ new callback
+                                    autoHideEnabled = false         // stop auto-hide during drag
+                                    isControlsVisible.value = true  // make sure HUD is visible
+                                },
                                 onSeekFinished = {
                                     val newPos = (seekPosition.value * duration.value).toLong()
                                     exoPlayer.seekTo(newPos)
                                     currentPosition.value = newPos
                                     isSeeking.value = false
+
+                                    // resume auto-hide only AFTER release
+                                    autoHideEnabled = true
                                     isControlsVisible.value = true
                                 },
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(32.dp)
                             )
+
 
                             // Compute preview text
                             val previewMs = (seekPosition.value * duration.value).toLong()
@@ -1486,23 +1606,25 @@ fun MainPlayerScreen(
             }
         }
 
-//        BackHandler { navController.popBackStack() }
-        BackHandler {
-            if (showEpisodes) {
-                // Close the Episodes overlay first
-                showEpisodes = false
-                autoHideEnabled = true
-                exoPlayer.playWhenReady = true
-            } else if (showSubtitleMenu) {
-                // Or if subtitle menu is open, close it first
-                showSubtitleMenu = false
-                autoHideEnabled = true
-                exoPlayer.playWhenReady = true
-            } else {
-                // Otherwise, perform your normal back navigation
-                navController.popBackStack()
+        //BackHandler { navController.popBackStack() }
+        BackHandler(enabled = true) {
+            when {
+                showEpisodes -> {
+                    showEpisodes = false
+                    autoHideEnabled = true
+                    exoPlayer.playWhenReady = true
+                }
+                showSubtitleMenu -> {
+                    showSubtitleMenu = false
+                    autoHideEnabled = true
+                    exoPlayer.playWhenReady = true
+                }
+                else -> {
+                    navController.popBackStack()
+                }
             }
         }
+
 
         if (showSubtitleMenu) {
             Box(
