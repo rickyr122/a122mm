@@ -861,6 +861,7 @@ fun MainPlayerScreen(
         var isForwardPressed by remember { mutableStateOf(false) }
         val forwardScale by animateFloatAsState(if (isForwardPressed) 1.2f else 1f, label = "forwardScale")
 
+        var backLoading by remember { mutableStateOf(false) }
         val backSize = 42.dp
         val backPadStart = 12.dp
         val backPadTop = 4.dp
@@ -1011,45 +1012,79 @@ fun MainPlayerScreen(
         ) {
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .zIndex(3f) // make sure it's over the center tap layer
-            ) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(start = backPadStart, top = backPadTop)
-                        .size(backSize)
-                        .pointerInput(Unit) {
-                            awaitEachGesture {
-                                val down = awaitFirstDown()
-                                down.consume() // ← eat it so nothing underneath toggles HUD
-                                val up = waitForUpOrCancellation()
-                                if (up != null) {
-                                    when {
-                                        showEpisodes -> {
-                                            showEpisodes = false
-                                            autoHideEnabled = true
-                                            exoPlayer.playWhenReady = true
+                    .align(Alignment.TopStart)
+                    .padding(start = backPadStart, top = backPadTop)
+                    .size(backSize)
+                    .animateEnterExit(
+                        enter = slideInVertically { -120 } + fadeIn(),
+                        exit  = slideOutVertically { -120 } + fadeOut()
+                    )
+                    .pointerInput(backLoading) {
+                        awaitEachGesture {
+                            val down = awaitFirstDown()
+                            down.consume()
+
+                            // If already loading, swallow the tap and bail
+                            if (backLoading) {
+                                waitForUpOrCancellation()
+                                return@awaitEachGesture
+                            }
+
+                            val up = waitForUpOrCancellation()
+                            if (up != null) {
+                                backLoading = true     // lock + show spinner immediately
+
+                                when {
+                                    showEpisodes -> {
+                                        // close overlay, then unlock shortly after to keep UI snappy
+                                        showEpisodes = false
+                                        autoHideEnabled = true
+                                        exoPlayer.playWhenReady = true
+                                        scope.launch {
+                                            // brief delay so user sees the feedback
+                                            kotlinx.coroutines.delay(250)
+                                            backLoading = false
                                         }
-                                        showSubtitleMenu -> {
-                                            showSubtitleMenu = false
-                                            autoHideEnabled = true
-                                            exoPlayer.playWhenReady = true
+                                    }
+                                    showSubtitleMenu -> {
+                                        showSubtitleMenu = false
+                                        autoHideEnabled = true
+                                        exoPlayer.playWhenReady = true
+                                        scope.launch {
+                                            kotlinx.coroutines.delay(250)
+                                            backLoading = false
                                         }
-                                        else -> navController.popBackStack()
+                                    }
+                                    else -> {
+                                        // navigating away; no need to unlock (screen will dispose)
+                                        navController.popBackStack()
                                     }
                                 }
                             }
                         }
-                ) {
+                    }
+            ) {
+                if (backLoading) {
+                    // compact spinner so it fits the 42.dp box
+                    CircularProgressIndicator(
+                        strokeWidth = 2.dp,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(8.dp),
+                        color = Color.White
+                    )
+                } else {
                     Icon(
                         imageVector = Icons.Default.ArrowBack,
                         contentDescription = "Back",
                         tint = Color.White,
-                        modifier = Modifier.fillMaxSize().padding(4.dp)
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(4.dp)
                     )
                 }
             }
+
         }
 
 
