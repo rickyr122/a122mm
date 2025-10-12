@@ -113,9 +113,11 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
+import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
@@ -375,7 +377,7 @@ fun MainPlayerScreen(
             .setTrackSelector(trackSelector)
             .build().apply {
                 setAudioAttributes(audioAttrs, true)
-                volume = 1.0f
+                volume = 1.3f
 
                 val startMs = (progress.coerceAtLeast(0)).toLong() * 1_000L - 5_000L
 
@@ -419,6 +421,26 @@ fun MainPlayerScreen(
                 playWhenReady = true
             }
     }
+
+    LaunchedEffect(exoPlayer) {
+        exoPlayer.addListener(object : Player.Listener {
+            override fun onPlayerError(error: PlaybackException) {
+                val cause = error.cause
+                Log.e("Player", "Playback error", cause)
+
+                // unwrap actual HTTP error if possible
+                if (cause is HttpDataSource.InvalidResponseCodeException) {
+                    Log.e("Player", "HTTP status: ${cause.responseCode}")
+                    Log.e("Player", "URL: ${cause.dataSpec.uri}")
+                } else if (cause is HttpDataSource.HttpDataSourceException) {
+                    Log.e("Player", "Network or IO error: ${cause.message}")
+                } else {
+                    Log.e("Player", "Non-network error: ${error.errorCodeName}")
+                }
+            }
+        })
+    }
+
 
     val scope = rememberCoroutineScope()
     val isLoading = remember { mutableStateOf(true) }
@@ -494,8 +516,16 @@ fun MainPlayerScreen(
         }
     }
 
+    var levelerEnabled by remember { mutableStateOf(true) }   // on/off
+    var levelerStrength by remember { mutableStateOf(0.6f) }  // 0f..1f
+
     LaunchedEffect(exoPlayer.audioSessionId) { /* hook for audio FX if needed */ }
-    RememberAndAttachAudioEffects(exoPlayer)
+    RememberAndAttachAudioEffects(
+        exoPlayer = exoPlayer,
+        enabled = true,
+        strength01 = 0.6f,
+        boostDb = 4f          // try 3–5 dB; 6 dB max
+    )
 
     LaunchedEffect(exoPlayer) {
         while (duration.value <= 1L) {
@@ -1868,83 +1898,95 @@ fun MainPlayerScreen(
 
     }
 }
+
 @Composable
-fun RememberAndAttachAudioEffects(exoPlayer: ExoPlayer) {
-    var enhancer: LoudnessEnhancer? by remember { mutableStateOf(null) }
-    var eq: Equalizer? by remember { mutableStateOf(null) }
-    var dyn: DynamicsProcessing? by remember { mutableStateOf(null) }
-
-    LaunchedEffect(exoPlayer.audioSessionId) {
-        try { enhancer?.release() } catch (_: Throwable) {}
-        try { eq?.release() } catch (_: Throwable) {}
-        try { dyn?.release() } catch (_: Throwable) {}
-
+fun RememberAndAttachAudioEffects(
+    exoPlayer: ExoPlayer,
+    enabled: Boolean,
+    strength01: Float,
+    boostDb: Float = 4f     // NEW: 0..6 recommended
+) {
+    DisposableEffect(exoPlayer.audioSessionId, enabled, strength01, boostDb) {
         val session = exoPlayer.audioSessionId
-        if (session == C.AUDIO_SESSION_ID_UNSET) return@LaunchedEffect
+        var enhancer: LoudnessEnhancer? = null
+        var dyn: DynamicsProcessing? = null
 
-        try {
-            enhancer = LoudnessEnhancer(session).apply {
-                setTargetGain(1200)
-                enabled = true
-            }
-        } catch (_: Throwable) {}
-
-        try {
-            eq = Equalizer(0, session).apply {
-                enabled = true
-                val bands = numberOfBands.toInt()
-                val lower = bandLevelRange[0]
-                val upper = bandLevelRange[1]
-                for (b in 0 until bands) {
-                    val centerHz = getCenterFreq(b.toShort()) / 1000
-                    val boostMb = when (centerHz) {
-                        in 800..1500 -> (upper * 0.35f).toInt()
-                        in 2500..4500 -> (upper * 0.25f).toInt()
-                        else -> 0
+        if (session != C.AUDIO_SESSION_ID_UNSET && enabled) {
+            if (Build.VERSION.SDK_INT < 28) {
+                // ---- pre-P fallback: LoudnessEnhancer only ----
+                try {
+                    val baseMb = (800 + (400 * strength01)).toInt()      // ≈ 8–12 dB
+                    val boostMb = (boostDb.coerceIn(0f, 6f) * 100f).toInt()
+                    enhancer = LoudnessEnhancer(session).apply {
+                        setTargetGain(baseMb + boostMb)                  // add safe extra loudness
+                        this.enabled = true
                     }
-                    if (boostMb != 0) setBandLevel(b.toShort(), (lower + boostMb).toShort())
+                } catch (_: Throwable) {}
+            } else {
+                // ---- Android 9+: MBC + Limiter ----
+                try {
+                    val mbcBands = 4
+                    val cfg = DynamicsProcessing.Config.Builder(
+                        DynamicsProcessing.VARIANT_FAVOR_TIME_RESOLUTION,
+                        2, false, 0, true, mbcBands, false, 0, true
+                    ).build()
+
+                    dyn = DynamicsProcessing(0, session, cfg).apply {
+                        val thr   = -26f + (8f * strength01)  // compressor threshold
+                        val ratio = 3f   + (3f * strength01)
+                        val atk   = 6f
+                        val rel   = 120f
+
+                        for (ch in 0 until 2) {
+                            val chProc = getChannelByChannelIndex(ch)
+                            for (b in 0 until mbcBands) {
+                                val band = chProc.mbc.getBand(b)
+                                band.isEnabled   = true
+                                band.threshold   = thr
+                                band.ratio       = ratio
+                                band.attackTime  = atk
+                                band.releaseTime = rel
+                                band.kneeWidth   = 3f
+                                band.postGain    = if (b == 2) 3f + 2f*strength01 else 1f + 1f*strength01
+                                chProc.mbc.setBand(b, band)
+                            }
+                            chProc.mbc.isEnabled = true
+                            setChannelTo(ch, chProc)
+                        }
+
+                        // Final limiter: add master make-up gain safely
+                        val safeBoost = boostDb.coerceIn(0f, 6f)
+                        val limiter = DynamicsProcessing.Limiter(
+                            /*enabled*/ true,
+                            /*link*/    true,
+                            /*attack*/  1,
+                            /*release*/ 50f,
+                            /*ratio*/   20f,
+                            /*thresh*/  -1.5f,
+                            /*knee*/    1.0f,
+                            /*post*/    safeBoost              // ★ raise overall loudness here
+                        )
+                        setLimiterByChannelIndex(0, limiter)
+                        setLimiterByChannelIndex(1, limiter)
+
+                        this.enabled = true
+                    }
+                } catch (_: Throwable) {
+                    // fallback if DP init fails
+                    try {
+                        val baseMb = (900 + (300 * strength01)).toInt()
+                        val boostMb = (boostDb.coerceIn(0f, 6f) * 100f).toInt()
+                        enhancer = LoudnessEnhancer(session).apply {
+                            setTargetGain(baseMb + boostMb)
+                            this.enabled = true
+                        }
+                    } catch (_: Throwable) {}
                 }
             }
-        } catch (_: Throwable) {}
-
-        if (Build.VERSION.SDK_INT >= 28) {
-            try {
-                val cfg = DynamicsProcessing.Config.Builder(
-                    DynamicsProcessing.VARIANT_FAVOR_TIME_RESOLUTION,
-                    2, false, 0, true, 1, false, 0, true
-                ).build()
-
-                dyn = DynamicsProcessing(0, session, cfg).apply {
-                    for (ch in 0 until 2) {
-                        val channel = getChannelByChannelIndex(ch)
-                        val mbc = channel.mbc
-                        mbc.isEnabled = true
-                        val band = mbc.getBand(0)
-                        band.attackTime = 8f
-                        band.releaseTime = 80f
-                        band.ratio = 4.5f
-                        band.threshold = -20f
-                        band.kneeWidth = 3f
-                        band.postGain = 9f
-                        mbc.setBand(0, band)
-                        channel.mbc = mbc
-                        setChannelTo(ch, channel)
-                    }
-                    val limiter = DynamicsProcessing.Limiter(
-                        true, true, 0, 1f, 50f, 12f, -1.5f, 0f
-                    )
-                    setLimiterByChannelIndex(0, limiter)
-                    setLimiterByChannelIndex(1, limiter)
-                    enabled = true
-                }
-            } catch (_: Throwable) { /* ignore */ }
         }
-    }
 
-    DisposableEffect(Unit) {
         onDispose {
             try { enhancer?.release() } catch (_: Throwable) {}
-            try { eq?.release() } catch (_: Throwable) {}
             try { dyn?.release() } catch (_: Throwable) {}
         }
     }
