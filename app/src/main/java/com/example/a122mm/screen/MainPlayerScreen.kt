@@ -20,10 +20,12 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -65,8 +67,14 @@ import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material.Divider
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Brightness6
+import androidx.compose.material.icons.filled.BrightnessHigh
+import androidx.compose.material.icons.filled.BrightnessLow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material.Slider
+import androidx.compose.material.SliderDefaults
+import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -82,9 +90,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -541,6 +552,35 @@ fun MainPlayerScreen(
         }
     }
 
+    // default to 50% regardless of system
+    var brightness by remember { mutableStateOf(0.5f) }
+
+// remember previous brightness so we can restore on dispose
+    val prevWinBrightness = remember {
+        activity?.window?.attributes?.screenBrightness
+            ?: WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+    }
+
+// apply brightness whenever it changes
+    LaunchedEffect(brightness) {
+        activity?.window?.let { w ->
+            val lp = w.attributes
+            lp.screenBrightness = brightness.coerceIn(0.05f, 1f)
+            w.attributes = lp
+        }
+    }
+
+// restore brightness when this screen leaves
+    DisposableEffect(Unit) {
+        onDispose {
+            activity?.window?.let { w ->
+                val lp = w.attributes
+                lp.screenBrightness = prevWinBrightness
+                w.attributes = lp
+            }
+        }
+    }
+
     // Keep your subtitle selection listener logic
     exoPlayer.addListener(object : Player.Listener {
         override fun onTracksChanged(tracks: Tracks) {
@@ -992,46 +1032,61 @@ fun MainPlayerScreen(
                         Icon(Icons.Default.Forward10, contentDescription = null, tint = Color.White, modifier = Modifier.fillMaxSize())
                     }
                 }
-//                Box(
-//                    modifier = Modifier
-//                        .align(Alignment.TopStart)
-//                        .padding(start = 12.dp, top = 4.dp)
-//                        .size(42.dp)
-//                        .animateEnterExit(                       // ⬅️ per-button animation
-//                            enter = slideInVertically { -120 } + fadeIn(),
-//                            exit  = slideOutVertically { -120 } + fadeOut()
-//                        )
-//                        .pointerInput(Unit) {
-//                            awaitEachGesture {
-//                                val down = awaitFirstDown()
-//                                down.consume()
-//                                val up = waitForUpOrCancellation()
-//                                if (up != null) {
-//                                    when {
-//                                        showEpisodes -> {
-//                                            showEpisodes = false
-//                                            autoHideEnabled = true
-//                                            exoPlayer.playWhenReady = true
-//                                        }
-//                                        showSubtitleMenu -> {
-//                                            showSubtitleMenu = false
-//                                            autoHideEnabled = true
-//                                            exoPlayer.playWhenReady = true
-//                                        }
-//                                        else -> navController.popBackStack()
-//                                    }
-//                                }
-//                            }
-//                        }
-//                ) {
-//                    Icon(
-//                        imageVector = Icons.Default.ArrowBack,
-//                        contentDescription = "Back",
-//                        tint = Color.White,
-//                        modifier = Modifier.fillMaxSize().padding(4.dp)
-//                    )
-//                }
 
+                // Brightness control – Netflix-style
+                // Brightness rail – taller & thumb hidden
+                // --- Brightness rail: inline with Play/Pause buttons, no background ---
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .offset(x = 36.dp, y = (-20).dp)
+                        .size(width = 56.dp, height = 140.dp)
+                        .zIndex(4f)
+                        .background(Color.Transparent),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.WbSunny,
+                            contentDescription = "Brightness",
+                            tint = Color.White.copy(alpha = 0.9f),
+                            modifier = Modifier.size(22.dp)
+                        )
+
+                        Spacer(Modifier.height(8.dp))
+
+                        VerticalBrightnessBar(
+                            value = brightness,          // default 0.5f
+                            onChange = { v ->
+                                brightness = v.coerceIn(0.05f, 1f)
+                                (context as? Activity)?.window?.let { w ->
+                                    val lp = w.attributes
+                                    lp.screenBrightness = brightness
+                                    w.attributes = lp
+                                }
+                                // keep HUD alive while scrubbing
+                                isControlsVisible.value = true
+                            },
+                            onHoldStart = {
+                                // exactly like your seekbar: show HUD & pause auto-hide
+                                isControlsVisible.value = true
+                                autoHideEnabled = false
+                            },
+                            onHoldEnd = {
+                                // release: allow auto-hide timer to resume
+                                autoHideEnabled = true
+                                isControlsVisible.value = true
+                            },
+                            modifier = Modifier
+                                .width(36.dp)
+                                .height(120.dp),
+                            trackWidth = 4.dp
+                        )
+                    }
+                }
             }
         }
 
@@ -2186,3 +2241,80 @@ private fun NextAutoButton(
         )
     }
 }
+
+@Composable
+fun VerticalBrightnessBar(
+    value: Float,                    // 0f..1f
+    onChange: (Float) -> Unit,
+    modifier: Modifier = Modifier,
+    trackWidth: Dp = 3.dp,
+    activeAlpha: Float = 1f,
+    inactiveAlpha: Float = 0.25f,
+    minValue: Float = 0.05f,
+    onHoldStart: () -> Unit = {},   // NEW
+    onHoldEnd: () -> Unit = {}      // NEW
+) {
+    val density = LocalDensity.current
+    val trackPx = with(density) { trackWidth.toPx() }
+
+    Box(
+        modifier = modifier
+            // Tap to set
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onPress = { offset ->
+                        try {
+                            onHoldStart()
+                            val h = size.height.toFloat().coerceAtLeast(1f)
+                            val newV = 1f - (offset.y / h)
+                            onChange(newV.coerceIn(minValue, 1f))
+                            // wait for release/cancel (blocks until finger lifts)
+                            tryAwaitRelease()
+                        } finally {
+                            onHoldEnd()
+                        }
+                    }
+                )
+            }
+            // Drag to adjust
+            .pointerInput(Unit) {
+                detectDragGestures(
+                    onDragStart = {
+                        onHoldStart()
+                    },
+                    onDrag = { change, _ ->
+                        change.consume()
+                        val h = size.height.toFloat().coerceAtLeast(1f)
+                        val y = change.position.y
+                        val newV = 1f - (y / h)
+                        onChange(newV.coerceIn(minValue, 1f))
+                    },
+                    onDragEnd = { onHoldEnd() },
+                    onDragCancel = { onHoldEnd() }
+                )
+            }
+    ) {
+        Canvas(Modifier.fillMaxSize()) {
+            val w = size.width
+            val h = size.height
+            // Inactive full track
+            drawLine(
+                color = Color.White.copy(alpha = inactiveAlpha),
+                start = Offset(w / 2f, 0f),
+                end = Offset(w / 2f, h),
+                strokeWidth = trackPx,
+                cap = StrokeCap.Round
+            )
+            // Active from bottom up
+            val yActive = h * (1f - value.coerceIn(0f, 1f))
+            drawLine(
+                color = Color.White.copy(alpha = activeAlpha),
+                start = Offset(w / 2f, h),
+                end = Offset(w / 2f, yActive),
+                strokeWidth = trackPx,
+                cap = StrokeCap.Round
+            )
+        }
+    }
+}
+
