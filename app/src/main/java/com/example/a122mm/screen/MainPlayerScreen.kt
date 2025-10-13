@@ -222,7 +222,7 @@ fun MainPlayerScreen(
 
     val configuration = LocalConfiguration.current
     val isTablet = configuration.smallestScreenWidthDp >= 600
-    val bottomLift = if (isTablet) 54.dp else 20.dp
+    val bottomLift = if (isTablet) 64.dp else 36.dp
 
     var showSubtitleMenu by remember { mutableStateOf(false) }
     var pendingSubSelection by remember { mutableStateOf(SubtitleOption.ENGLISH) } // default
@@ -892,7 +892,7 @@ fun MainPlayerScreen(
         val forwardScale by animateFloatAsState(if (isForwardPressed) 1.2f else 1f, label = "forwardScale")
 
         var backLoading by remember { mutableStateOf(false) }
-        val backSize = 42.dp
+        val backSize = 48.dp
         val backPadStart = 12.dp
         val backPadTop = 4.dp
 
@@ -1203,7 +1203,7 @@ fun MainPlayerScreen(
 
                     val menuIconSz = if (isTablet) 32.dp else 24.dp
                     val menuTextSz = if (isTablet) 18.sp else 16.sp
-                    val spacerHeight = if (isTablet) 24.dp else 2.dp
+                    val spacerHeight = if (isTablet) 24.dp else 18.dp
                     val ctx = LocalContext.current
 
                     Spacer(Modifier.height(spacerHeight))
