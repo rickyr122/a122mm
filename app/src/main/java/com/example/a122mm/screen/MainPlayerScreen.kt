@@ -3,14 +3,12 @@ package com.example.a122mm.screen
 import android.app.Activity
 import android.content.pm.ActivityInfo
 import android.media.audiofx.DynamicsProcessing
-import android.media.audiofx.Equalizer
 import android.media.audiofx.LoudnessEnhancer
 import android.net.Uri
 import android.os.Build
 import android.util.Log
 import android.view.View
 import android.view.WindowManager
-import android.widget.FrameLayout
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
@@ -47,16 +45,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.Divider
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -64,17 +62,10 @@ import androidx.compose.material.icons.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.Replay10
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Subtitles
+import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material.Divider
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.Brightness6
-import androidx.compose.material.icons.filled.BrightnessHigh
-import androidx.compose.material.icons.filled.BrightnessLow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material.Slider
-import androidx.compose.material.SliderDefaults
-import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -90,7 +81,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
@@ -107,7 +97,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -142,14 +131,17 @@ import com.example.a122mm.helper.encodeUrlSegmentsStrict
 import com.example.a122mm.helper.fixEncoding
 import com.example.a122mm.helper.formatTime
 import com.example.a122mm.helper.getCFlareUrl
-import com.example.a122mm.helper.setScreenOrientation
 import com.example.a122mm.utility.formatDurationFromMinutes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import retrofit2.http.Field
+import retrofit2.http.FormUrlEncoded
 import retrofit2.http.GET
+import retrofit2.http.POST
 import retrofit2.http.Query
+import kotlin.math.floor
 import kotlin.math.roundToInt
 
 
@@ -201,6 +193,29 @@ interface ApiVideoDetails {
         @Query("season") season: Int
     ): List<EpisodeItem>
 }
+
+interface ApiContinueWatching {
+    @FormUrlEncoded
+    @POST("addcontinuewatching")
+    suspend fun upsert(
+        @Field("mId") mId: String,
+        @Field("cId") cId: String,
+        @Field("cProgress") cProgress: Double,
+        @Field("cPercent") cPercent: Double,
+        @Field("cPosition") cPosition: Double,
+        @Field("client_time") clientTime: String,
+        @Field("state") state: String = "u"
+    ): String
+
+    @FormUrlEncoded
+    @POST("addcontinuewatching")
+    suspend fun delete(
+        @Field("mId") mId: String,
+        @Field("cId") cId: String,
+        @Field("state") state: String = "d"
+    ): String
+}
+
 
 // ----- ViewModel: wiring & API calls -----
 class RecentWatchViewModel : ViewModel() {
@@ -350,7 +365,7 @@ fun MainPlayerScreen(
         }
     }
 
-        // TrackSelector respects your external SRT rule
+    // TrackSelector respects your external SRT rule
     val trackSelector = remember(hasExternalSrt) {
         DefaultTrackSelector(context).apply {
             setParameters(
@@ -468,6 +483,72 @@ fun MainPlayerScreen(
 
     var creditsMode by remember { mutableStateOf(false) } // when true, keep buttons hidden until STATE_ENDED
 
+
+    // Continue Watching API
+    val cwApi = remember { ApiClient.create(ApiContinueWatching::class.java) }
+
+    // Compose helpers to compute params safely
+    fun currentClientTime(): String {
+        val now = java.time.LocalDateTime.now()
+        return now.format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+    }
+
+    // Decide IDs:
+    // mId = vData!!.mId  (MOV-... or TVG-...)
+    // cId = if episode -> currentCode (TVS-...), else movie -> vData!!.mId
+    fun resolveIds(): Pair<String,String> {
+        val mid = vData!!.mId
+        val cid = if (currentCode.startsWith("TVS", ignoreCase = true)) currentCode else mid
+        return mid to cid
+    }
+
+    // Calculate progress numbers from player state
+    fun calcProgressTriplet(): Triple<Double, Double, Double> {
+        val durMs = duration.value.coerceAtLeast(1L).toDouble()
+        val posMs = currentPosition.value.coerceAtLeast(0L).toDouble()
+
+        // round down to integer seconds
+        val progressSec = floor(posMs / 1000.0)
+
+        val pct = (posMs / durMs).coerceIn(0.0, 1.0)
+        return Triple(progressSec, pct, pct)
+    }
+
+
+    // Fire-and-forget "u"
+    fun postCWUpdate() {
+        val (mid, cid) = resolveIds()
+        val (prog, pct, pos) = calcProgressTriplet()
+        val ts = currentClientTime()
+        scope.launch(Dispatchers.IO) {
+            try {
+                cwApi.upsert(
+                    mId = mid,
+                    cId = cid,
+                    cProgress = prog,
+                    cPercent = pct,
+                    cPosition = pos,
+                    clientTime = ts,
+                    state = "u"
+                )
+            } catch (e: Exception) {
+                Log.e("CW", "upsert failed: ${e.message}")
+            }
+        }
+    }
+
+    // Fire-and-forget "d"
+    fun postCWDelete() {
+        val (mid, cid) = resolveIds()
+        scope.launch(Dispatchers.IO) {
+            try {
+                cwApi.delete(mId = mid, cId = cid, state = "d")
+            } catch (e: Exception) {
+                Log.e("CW", "delete failed: ${e.message}")
+            }
+        }
+    }
+
     fun goToNextEpisode() {
         val next = vData?.nextTvId.orEmpty()
         if (next.isBlank()) return
@@ -476,12 +557,21 @@ fun MainPlayerScreen(
         currentCode = next            // triggers LaunchedEffect(currentCode)
     }
 
+    var sentDeleteOnCr by remember { mutableStateOf(false) }
+
     LaunchedEffect(currentPosition.value, duration.value, nextId, crStartSec, isLoading.value, creditsMode) {
         if (creditsMode) return@LaunchedEffect               // ⬅️ important
         if (duration.value <= 0L || isLoading.value) return@LaunchedEffect
 
         val remainingMs = (duration.value - currentPosition.value).coerceAtLeast(0L)
         val triggerMs = crStartSec.coerceAtLeast(0) * 1000L
+
+        // ★ CW: delete once when remaining time <= crTime
+        if (!sentDeleteOnCr && remainingMs <= triggerMs) {
+            sentDeleteOnCr = true
+            postCWDelete()
+        }
+
         val shouldShow = nextId.isNotBlank() &&
                 remainingMs in 1..triggerMs &&
                 exoPlayer.playWhenReady &&
@@ -496,6 +586,15 @@ fun MainPlayerScreen(
         }
     }
 
+    var sent10s by remember { mutableStateOf(false) }
+
+    LaunchedEffect(currentPosition.value) {
+        if (!sent10s && currentPosition.value >= 10_000L) {
+            sent10s = true
+            // ★ CW
+            postCWUpdate()
+        }
+    }
 
     LaunchedEffect(showEndButtons, creditsMode) {
         if (!showEndButtons || creditsMode) return@LaunchedEffect
@@ -981,6 +1080,7 @@ fun MainPlayerScreen(
                             }
 
                             exoPlayer.seekBack()
+                            postCWUpdate()
                             coroutineScope.launch { delay(100); isReplayPressed = false }
                         },
                         modifier = Modifier.size(64.dp).scale(replayScale)
@@ -998,6 +1098,7 @@ fun MainPlayerScreen(
                             exoPlayer.playWhenReady = newState
                             isPlayingState.value = newState
                             isControlsVisible.value = true   // restart 4s timer
+                            postCWUpdate()
                             coroutineScope.launch { delay(100); isPlayPressed = false }
                         },
                         modifier = Modifier.size(96.dp).scale(playScale).padding(horizontal = 12.dp)
@@ -1025,6 +1126,7 @@ fun MainPlayerScreen(
                             }
 
                             exoPlayer.seekForward()
+                            postCWUpdate()
                             coroutineScope.launch { delay(100); isForwardPressed = false }
                         },
                         modifier = Modifier.size(64.dp).scale(forwardScale)
@@ -1141,6 +1243,7 @@ fun MainPlayerScreen(
                                         }
                                     }
                                     else -> {
+                                        postCWUpdate()
                                         // navigating away; no need to unlock (screen will dispose)
                                         navController.popBackStack()
                                     }
@@ -1220,10 +1323,10 @@ fun MainPlayerScreen(
                                     exoPlayer.seekTo(newPos)
                                     currentPosition.value = newPos
                                     isSeeking.value = false
-
                                     // resume auto-hide only AFTER release
                                     autoHideEnabled = true
                                     isControlsVisible.value = true
+                                    postCWUpdate()
                                 },
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -1795,6 +1898,7 @@ fun MainPlayerScreen(
                     exoPlayer.playWhenReady = true
                 }
                 else -> {
+                    postCWUpdate()
                     navController.popBackStack()
                 }
             }
@@ -1932,6 +2036,7 @@ fun MainPlayerScreen(
                             showEndButtons = false
                             // keep playing to the end
                             exoPlayer.playWhenReady = true
+                            postCWDelete()
                         }
                         .padding(horizontal = 16.dp, vertical = 10.dp)
                 ) {
@@ -2317,4 +2422,3 @@ fun VerticalBrightnessBar(
         }
     }
 }
-
