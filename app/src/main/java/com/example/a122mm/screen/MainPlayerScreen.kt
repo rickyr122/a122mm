@@ -497,9 +497,9 @@ fun MainPlayerScreen(
     // mId = vData!!.mId  (MOV-... or TVG-...)
     // cId = if episode -> currentCode (TVS-...), else movie -> vData!!.mId
     fun resolveIds(): Pair<String,String> {
-        val mid = vData!!.mId
-        val cid = if (currentCode.startsWith("TVS", ignoreCase = true)) currentCode else mid
-        return mid to cid
+        val gid = vData!!.gId
+        val cid = if (currentCode.startsWith("TVS", ignoreCase = true)) currentCode else gid
+        return gid to cid
     }
 
     // Calculate progress numbers from player state
@@ -513,7 +513,6 @@ fun MainPlayerScreen(
         val pct = (posMs / durMs).coerceIn(0.0, 1.0)
         return Triple(progressSec, pct, pct)
     }
-
 
     // Fire-and-forget "u"
     fun postCWUpdate() {
@@ -549,6 +548,25 @@ fun MainPlayerScreen(
         }
     }
 
+    // Remaining ms helper
+    fun remainingMs(): Long =
+        (duration.value - currentPosition.value).coerceAtLeast(0L)
+
+    // Should we send state="u" now?
+    fun shouldSendUpdate(): Boolean {
+        val rem = remainingMs()
+        val triggerMs = vData!!.crTime.coerceAtLeast(0) * 1000L
+        val hasNext = vData!!.nextTvId.isNotBlank()
+        return (rem > triggerMs) || hasNext
+    }
+
+    // Guarded version of "u"
+    fun postCWUpdateGuarded() {
+        if (!shouldSendUpdate()) return
+        postCWUpdate()
+    }
+
+
     fun goToNextEpisode() {
         val next = vData?.nextTvId.orEmpty()
         if (next.isBlank()) return
@@ -557,7 +575,17 @@ fun MainPlayerScreen(
         currentCode = next            // triggers LaunchedEffect(currentCode)
     }
 
-    var sentDeleteOnCr by remember { mutableStateOf(false) }
+    //var sent10s by remember { mutableStateOf(false) }
+    //    var sentDeleteOnCr by remember { mutableStateOf(false) }
+
+    var sent10s by remember(currentCode) { mutableStateOf(false) }
+    var sentDeleteOnCr by remember(currentCode) { mutableStateOf(false) }
+
+    // (optional extra safety if you prefer explicit reset)
+    LaunchedEffect(currentCode) {
+        sent10s = false
+        sentDeleteOnCr = false
+    }
 
     LaunchedEffect(currentPosition.value, duration.value, nextId, crStartSec, isLoading.value, creditsMode) {
         if (creditsMode) return@LaunchedEffect               // ⬅️ important
@@ -586,13 +614,13 @@ fun MainPlayerScreen(
         }
     }
 
-    var sent10s by remember { mutableStateOf(false) }
+
 
     LaunchedEffect(currentPosition.value) {
         if (!sent10s && currentPosition.value >= 10_000L) {
             sent10s = true
             // ★ CW
-            postCWUpdate()
+            postCWUpdateGuarded()
         }
     }
 
@@ -609,6 +637,7 @@ fun MainPlayerScreen(
             delay(stepMs)
         }
         if (nextAnimRunning && !creditsMode) {
+            postCWDelete()
             goToNextEpisode()
         }
     }
@@ -679,6 +708,13 @@ fun MainPlayerScreen(
             }
         }
     }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            try { postCWUpdateGuarded() } catch (_: Throwable) { }
+        }
+    }
+
 
     // Keep your subtitle selection listener logic
     exoPlayer.addListener(object : Player.Listener {
@@ -781,6 +817,7 @@ fun MainPlayerScreen(
                         allowControlsWhileLoading = false
                     }
                     Player.STATE_ENDED -> {
+                        postCWDelete()
                         if (vData?.nextTvId.orEmpty().isNotBlank()) {
                             creditsMode = false
                             goToNextEpisode()
@@ -973,55 +1010,6 @@ fun MainPlayerScreen(
             }
         }
 
-        // Back (always on top of overlay/clickable surface)
-        // Replace your AnimatedVisibility for the back button with this:
-//        AnimatedVisibility(
-//            visible = isControlsVisible.value && (!isLoading.value || suppressSpinner || allowControlsWhileLoading),
-//            enter = slideInVertically(initialOffsetY = { -150 }) + fadeIn(),
-//            exit = slideOutVertically(targetOffsetY = { -150 }) + fadeOut()
-//        ) {
-//            Box(
-//                modifier = Modifier
-//                    .align(Alignment.TopStart)
-//                    .padding(start = 12.dp, top = 4.dp)
-//                    .size(42.dp)
-//                    .pointerInput(Unit) {
-//                        awaitEachGesture {
-//                            val down = awaitFirstDown()
-//                            down.consume()
-//                            val up = waitForUpOrCancellation()
-//                            if (up != null) {
-//                                when {
-//                                    showEpisodes -> {
-//                                        showEpisodes = false
-//                                        autoHideEnabled = true
-//                                        exoPlayer.playWhenReady = true
-//                                    }
-//                                    showSubtitleMenu -> {
-//                                        showSubtitleMenu = false
-//                                        autoHideEnabled = true
-//                                        exoPlayer.playWhenReady = true
-//                                    }
-//                                    else -> navController.popBackStack()
-//                                }
-//                            }
-//                        }
-//                    }
-//            ) {
-//                Icon(
-//                    imageVector = Icons.Default.ArrowBack,
-//                    contentDescription = "Back",
-//                    tint = Color.White,
-//                    modifier = Modifier
-//                        .fillMaxSize()
-//                        .padding(4.dp)
-//                )
-//            }
-//        }
-
-
-
-
         val coroutineScope = rememberCoroutineScope()
         var isPlayPressed by remember { mutableStateOf(false) }
         val playScale by animateFloatAsState(if (isPlayPressed) 1.2f else 1f, label = "playScale")
@@ -1080,7 +1068,7 @@ fun MainPlayerScreen(
                             }
 
                             exoPlayer.seekBack()
-                            postCWUpdate()
+                            postCWUpdateGuarded()
                             coroutineScope.launch { delay(100); isReplayPressed = false }
                         },
                         modifier = Modifier.size(64.dp).scale(replayScale)
@@ -1098,7 +1086,7 @@ fun MainPlayerScreen(
                             exoPlayer.playWhenReady = newState
                             isPlayingState.value = newState
                             isControlsVisible.value = true   // restart 4s timer
-                            postCWUpdate()
+                            postCWUpdateGuarded()
                             coroutineScope.launch { delay(100); isPlayPressed = false }
                         },
                         modifier = Modifier.size(96.dp).scale(playScale).padding(horizontal = 12.dp)
@@ -1126,7 +1114,7 @@ fun MainPlayerScreen(
                             }
 
                             exoPlayer.seekForward()
-                            postCWUpdate()
+                            postCWUpdateGuarded()
                             coroutineScope.launch { delay(100); isForwardPressed = false }
                         },
                         modifier = Modifier.size(64.dp).scale(forwardScale)
@@ -1243,7 +1231,7 @@ fun MainPlayerScreen(
                                         }
                                     }
                                     else -> {
-                                        postCWUpdate()
+                                        postCWUpdateGuarded()
                                         // navigating away; no need to unlock (screen will dispose)
                                         navController.popBackStack()
                                     }
@@ -1326,7 +1314,7 @@ fun MainPlayerScreen(
                                     // resume auto-hide only AFTER release
                                     autoHideEnabled = true
                                     isControlsVisible.value = true
-                                    postCWUpdate()
+                                    postCWUpdateGuarded()
                                 },
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -1457,11 +1445,8 @@ fun MainPlayerScreen(
                                 if (nextId != "") {
                                     Row(
                                         modifier = Modifier.clickable {
+                                            postCWDelete()
                                             val next = vData?.nextTvId.orEmpty()
-//                                            if (next.isBlank()) {
-//                                                android.widget.Toast.makeText(ctx, "No next episode", android.widget.Toast.LENGTH_SHORT).show()
-//                                                return@clickable
-//                                            }
 
                                             // Optional: stop current playback immediately so user sees a quick reload
                                             try { exoPlayer.stop() } catch (_: Throwable) {}
@@ -1898,7 +1883,7 @@ fun MainPlayerScreen(
                     exoPlayer.playWhenReady = true
                 }
                 else -> {
-                    postCWUpdate()
+                    postCWUpdateGuarded()
                     navController.popBackStack()
                 }
             }
@@ -2027,7 +2012,7 @@ fun MainPlayerScreen(
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0xFF3A3A3A))
+                        .background(Color(0xFF333333))
                         .clickable {
                             // enter credits mode: hide buttons and stop auto-fill
                             creditsMode = true
@@ -2319,7 +2304,7 @@ private fun NextAutoButton(
     Box(
         modifier = Modifier
             .clip(shape)
-            .background(Color(0xFF3A3A3A)) // base gray
+            .background(Color(0xFFC0C0C0)) // base gray
             .drawBehind {
                 // draw the white fill from left→right within the button's own size
                 drawRoundRect(
@@ -2337,7 +2322,7 @@ private fun NextAutoButton(
             .clickable { onClick() }
             .padding(horizontal = 16.dp, vertical = 10.dp) // sets the intrinsic height
     ) {
-        val textColor = if (clamped >= 0.55f) Color.Black else Color.White
+        val textColor = Color.Black //if (clamped >= 0.55f) Color.Black else Color.White
         Text(
             text = label,
             color = textColor,
