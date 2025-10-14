@@ -587,6 +587,29 @@ fun MainPlayerScreen(
         sentDeleteOnCr = false
     }
 
+    // Periodic continue-watching checkpoint every 60s while actually playing
+    LaunchedEffect(currentCode) {
+        // reset on each episode/movie
+        while (true) {
+            kotlinx.coroutines.delay(60_000L)
+
+            // Only send if:
+            // - player is ready
+            // - actually playing (not paused/buffering)
+            // - duration known
+            val ready = exoPlayer.playbackState == Player.STATE_READY
+            val playing = exoPlayer.playWhenReady && ready
+            val hasDuration = duration.value > 0L
+
+            if (playing && hasDuration && !isSeeking.value) {
+                // Your guard: remaining > crTime OR there is a next episode
+                postCWUpdateGuarded()
+            }
+            // else: skip silently
+        }
+    }
+
+
     LaunchedEffect(currentPosition.value, duration.value, nextId, crStartSec, isLoading.value, creditsMode) {
         if (creditsMode) return@LaunchedEffect               // ⬅️ important
         if (duration.value <= 0L || isLoading.value) return@LaunchedEffect
