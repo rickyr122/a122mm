@@ -1159,11 +1159,24 @@ fun MainPlayerScreen(
                 // Brightness control – Netflix-style
                 // Brightness rail – taller & thumb hidden
                 // --- Brightness rail: inline with Play/Pause buttons, no background ---
+
+                // === Tablet-aware dims for brightness rail ===
+                val brightnessBarWidth     = if (isTablet) 88.dp else 72.dp
+                val brightnessBarHeight    = if (isTablet) 180.dp else 140.dp
+                val brightnessIconSize     = if (isTablet) 28.dp else 22.dp
+                val brightnessTrackWidth   = if (isTablet) 10.dp  else 8.dp
+                val brightnessOffsetX      = if (isTablet) 48.dp else 36.dp
+                val brightnessOffsetY      = if (isTablet) (-24).dp else (-20).dp
+                val brightnessSpacerHeight = if (isTablet) 12.dp else 8.dp
+                val brightnessRailWidth    = if (isTablet) 48.dp else 40.dp
+                val brightnessRailHeight   = if (isTablet) 156.dp else 120.dp
+
+                // --- Brightness rail: inline with Play/Pause buttons, no background ---
                 Box(
                     modifier = Modifier
                         .align(Alignment.CenterStart)
-                        .offset(x = 36.dp, y = (-20).dp)
-                        .size(width = 56.dp, height = 140.dp)
+                        .offset(x = brightnessOffsetX, y = brightnessOffsetY)
+                        .size(width = brightnessBarWidth, height = brightnessBarHeight)
                         .zIndex(4f)
                         .background(Color.Transparent),
                     contentAlignment = Alignment.Center
@@ -1176,10 +1189,10 @@ fun MainPlayerScreen(
                             imageVector = Icons.Filled.WbSunny,
                             contentDescription = "Brightness",
                             tint = Color.White.copy(alpha = 0.9f),
-                            modifier = Modifier.size(22.dp)
+                            modifier = Modifier.size(brightnessIconSize)
                         )
 
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(brightnessSpacerHeight))
 
                         VerticalBrightnessBar(
                             value = brightness,          // default 0.5f
@@ -1194,22 +1207,22 @@ fun MainPlayerScreen(
                                 isControlsVisible.value = true
                             },
                             onHoldStart = {
-                                // exactly like your seekbar: show HUD & pause auto-hide
+                                // like seekbar: show HUD & pause auto-hide
                                 isControlsVisible.value = true
                                 autoHideEnabled = false
                             },
                             onHoldEnd = {
-                                // release: allow auto-hide timer to resume
                                 autoHideEnabled = true
                                 isControlsVisible.value = true
                             },
                             modifier = Modifier
-                                .width(36.dp)
-                                .height(120.dp),
-                            trackWidth = 4.dp
+                                .width(brightnessRailWidth)
+                                .height(brightnessRailHeight),
+                            trackWidth = brightnessTrackWidth
                         )
                     }
                 }
+
             }
         }
 
@@ -2463,7 +2476,7 @@ fun VerticalBrightnessBar(
                 start = Offset(w / 2f, 0f),
                 end = Offset(w / 2f, h),
                 strokeWidth = trackPx,
-                cap = StrokeCap.Round
+                cap = StrokeCap.Square
             )
             // Active from bottom up
             val yActive = h * (1f - value.coerceIn(0f, 1f))
@@ -2472,7 +2485,7 @@ fun VerticalBrightnessBar(
                 start = Offset(w / 2f, h),
                 end = Offset(w / 2f, yActive),
                 strokeWidth = trackPx,
-                cap = StrokeCap.Round
+                cap = StrokeCap.Square
             )
         }
     }
