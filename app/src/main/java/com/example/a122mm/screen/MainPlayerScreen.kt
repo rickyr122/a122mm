@@ -79,6 +79,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
@@ -373,7 +374,7 @@ fun MainPlayerScreen(
                     if (hasExternalSrt) {
                         setSelectUndeterminedTextLanguage(false)
                         setPreferredTextLanguage(null)
-                        setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                        setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
                     } else {
                         setSelectUndeterminedTextLanguage(true)
                         setPreferredTextLanguage(null)
@@ -438,7 +439,7 @@ fun MainPlayerScreen(
                 if (hasExternalSrt) {
                     trackSelectionParameters = trackSelectionParameters
                         .buildUpon()
-                        .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                        .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
                         .clearOverridesOfType(C.TRACK_TYPE_TEXT)
                         .build()
                 }
@@ -568,6 +569,7 @@ fun MainPlayerScreen(
 
 
     fun goToNextEpisode() {
+        manualSubtitleChange = false
         val next = vData?.nextTvId.orEmpty()
         if (next.isBlank()) return
         try { exoPlayer.stop() } catch (_: Throwable) {}
@@ -719,6 +721,14 @@ fun MainPlayerScreen(
             lp.screenBrightness = brightness.coerceIn(0.05f, 1f)
             w.attributes = lp
         }
+    }
+
+    LaunchedEffect(currentCode) {
+        manualSubtitleChange = false   // ✅ allow auto-default on every new episode
+    }
+
+    LaunchedEffect(currentCode, hasExternalSrt) {
+        pendingSubSelection = if (hasExternalSrt) SubtitleOption.INDONESIAN else SubtitleOption.ENGLISH
     }
 
 // restore brightness when this screen leaves
@@ -1468,7 +1478,9 @@ fun MainPlayerScreen(
                                 if (nextId != "") {
                                     Row(
                                         modifier = Modifier.clickable {
+                                            manualSubtitleChange = false
                                             postCWDelete()
+
                                             val next = vData?.nextTvId.orEmpty()
 
                                             // Optional: stop current playback immediately so user sees a quick reload
@@ -1988,6 +2000,8 @@ fun MainPlayerScreen(
 
                     Spacer(Modifier.height(24.dp))
 
+
+
                     Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
                         Text(
                             "Cancel",
@@ -2000,24 +2014,57 @@ fun MainPlayerScreen(
                                 .padding(horizontal = 16.dp, vertical = 8.dp)
                         )
                         Spacer(Modifier.width(12.dp))
-                        Text(
-                            "Apply",
-                            color = Color.Black,
+
+                        // state
+                        var isApplyingSubtitle by remember { mutableStateOf(false) }
+
+                        val interaction = remember { MutableInteractionSource() }
+
+                        Box(
                             modifier = Modifier
                                 .background(Color.White, RoundedCornerShape(8.dp))
-                                .clickable {
+                                .alpha(if (isApplyingSubtitle) 0.7f else 1f)
+                                .clickable(
+                                    enabled = !isApplyingSubtitle,
+                                    interactionSource = interaction,
+                                    indication = null
+                                ) {
                                     manualSubtitleChange = true
-                                    applySubtitleSelection(
-                                        selection = pendingSubSelection,
-                                        hasExternalSrt = hasExternalSrt,
-                                        player = exoPlayer
-                                    )
-                                    showSubtitleMenu = false
-                                    isControlsVisible.value = true
-                                    exoPlayer.playWhenReady = true // resume playback
+                                    isApplyingSubtitle = true
+
+                                    // IMPORTANT: Player ops must run on Main
+                                    scope.launch {
+                                        try {
+                                            // If applySubtitleSelection touches ExoPlayer, keep it on Main.
+                                            applySubtitleSelection(
+                                                selection = pendingSubSelection,
+                                                hasExternalSrt = hasExternalSrt,
+                                                player = exoPlayer
+                                            )
+                                        } finally {
+                                            isApplyingSubtitle = false
+                                            showSubtitleMenu = false
+                                            isControlsVisible.value = true
+                                            exoPlayer.playWhenReady = true // resume playback (still main)
+                                        }
+                                    }
                                 }
                                 .padding(horizontal = 16.dp, vertical = 8.dp)
-                        )
+                        ) {
+                            if (isApplyingSubtitle) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    androidx.compose.material.CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("Applying...", color = Color.Black)
+                                }
+                            } else {
+                                Text("Apply", color = Color.Black)
+                            }
+                        }
+
                     }
                 }
             }
