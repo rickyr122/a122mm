@@ -213,6 +213,7 @@ interface ApiContinueWatching {
     suspend fun delete(
         @Field("mId") mId: String,
         @Field("cId") cId: String,
+        @Field("client_time") clientTime: String,
         @Field("state") state: String = "d"
     ): String
 }
@@ -540,9 +541,15 @@ fun MainPlayerScreen(
     // Fire-and-forget "d"
     fun postCWDelete() {
         val (mid, cid) = resolveIds()
+        val ts = currentClientTime()
         scope.launch(Dispatchers.IO) {
             try {
-                cwApi.delete(mId = mid, cId = cid, state = "d")
+                cwApi.delete(
+                    mId = mid,
+                    cId = cid,
+                    clientTime = ts,
+                    state = "d"
+                )
             } catch (e: Exception) {
                 Log.e("CW", "delete failed: ${e.message}")
             }
