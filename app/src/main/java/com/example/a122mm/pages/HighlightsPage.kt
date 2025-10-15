@@ -56,6 +56,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.example.a122mm.dataclass.ApiClient
 import com.example.a122mm.helper.InListCache.get
@@ -77,6 +78,7 @@ data class HighlightDto(
     val mId: String,
     val mTitle: String,
     val cvrUrl: String,
+    val playId: String,
     val enLogo: String? = null,
     val mDescription: String,
     val mContent: String? = null,
@@ -107,6 +109,7 @@ data class HighlightItem(
     val mId: String,
     val mTitle: String,
     val cvrUrl: String,
+    val playId: String,
     val enLogo: String? = null,
     val mDescription: String? = null,
     val mContent: String,
@@ -155,6 +158,7 @@ class HighlightsViewModel : ViewModel() {
                             mId = dto.mId,
                             mTitle = dto.mTitle,
                             cvrUrl = dto.cvrUrl,
+                            playId = dto.playId,
                             enLogo = dto.enLogo,
                             mDescription = dto.mDescription.fixEncoding(),
                             mContent = dto.mContent!!,
@@ -195,7 +199,8 @@ fun HighlightsPage(
     modifier: Modifier = Modifier,
     activeCode: String = "RECENT",
     onRefreshTriggered: () -> Unit = {},
-    viewModel: HighlightsViewModel = viewModel()
+    viewModel: HighlightsViewModel = viewModel(),
+    navController: NavController
 ) {
     // Trigger load when pills change
     LaunchedEffect(activeCode) {
@@ -249,7 +254,8 @@ fun HighlightsPage(
                             item = item,
                             activeCode = activeCode,
                             rank = idx + 1,
-                            onRefreshTriggered = onRefreshTriggered
+                            onRefreshTriggered = onRefreshTriggered,
+                            navController = navController,
                         )
                     }
                     //Spacer(Modifier.height(12.dp))
@@ -264,7 +270,8 @@ private fun HighlightCard(
     item: HighlightItem,
     activeCode: String,
     rank: Int,
-    onRefreshTriggered: () -> Unit = {}
+    onRefreshTriggered: () -> Unit = {},
+    navController: NavController
 ) {
     val configuration = LocalConfiguration.current
     val isTablet = configuration.screenWidthDp >= 600
@@ -473,7 +480,13 @@ private fun HighlightCard(
                 ) {
                     // Play
                     Button(
-                        onClick = { /* TODO */ },
+                        onClick = {
+                            // Write to the "home" destination's SavedStateHandle
+                            navController.getBackStackEntry("home")
+                                .savedStateHandle["selectedTab"] = 2  // 2 = Highlights
+
+                            navController.navigate("playmovie/${item.playId}")
+                                  },
                         modifier = Modifier
                             .height(36.dp)
                             .defaultMinSize(minWidth = 0.dp, minHeight = 0.dp),

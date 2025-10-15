@@ -42,6 +42,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.example.a122mm.utility.formatDurationFromMinutes
 
@@ -54,7 +55,8 @@ fun TvEpisodes(
     onSeasonSelected: (Int) -> Unit,
     gName: String,
     activeEpisodeIndex: Int,
-    activeSeason: Int
+    activeSeason: Int,
+    navController: NavController
 ) {
     val configuration = LocalConfiguration.current
     val isTablet = configuration.screenWidthDp >= 600
@@ -229,6 +231,11 @@ fun TvEpisodes(
                                 .size(38.dp)
                                 .background(Color.Black.copy(alpha = 0.6f), shape = RoundedCornerShape(50))
                                 .border(2.dp, Color.White, shape = RoundedCornerShape(50))
+                                .clickable{
+                                    navController.navigate(
+                                        "playmovie/${episode.tvId}"
+                                    )
+                                }
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.PlayArrow,

@@ -1017,7 +1017,8 @@ fun MovieDetailContent(
                                             },
                                             gName = movie.gName,
                                             activeEpisodeIndex = movie.activeEps - 1,
-                                            activeSeason = movie.activeSeason
+                                            activeSeason = movie.activeSeason,
+                                            navController = navController
                                         )
                                     }
                                 }

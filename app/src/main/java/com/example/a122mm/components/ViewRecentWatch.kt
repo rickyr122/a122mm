@@ -329,7 +329,11 @@ fun ViewRecentWatch(
                 BottomSheetItem(rewatchLabel, Icons.Filled.PlayArrow) {
                     // If you have a direct player route, call it here.
                     // Fallback: open details (user can hit Play)
-                    navController.navigate("movie/${selectedItem?.gId}")
+                    // Write to the "home" destination's SavedStateHandle
+                    navController.getBackStackEntry("home")
+                        .savedStateHandle["selectedTab"] = 3  // 3 = Profile
+
+                    navController.navigate("playmovie/${selectedItem?.mId}")
                     scope.launch { sheetState.hide() }
                 }
 

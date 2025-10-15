@@ -82,6 +82,7 @@ import retrofit2.http.Query
 data class ContinueWatchingResponseContent(
     val mId: String,
     val mTitle: String,
+    val playId: String,
     val cvrUrl: String,
     val cPercent: Double?,
     val seasonNum: String?,
@@ -290,7 +291,16 @@ fun ViewContinue(
                         .background(
                             color = Color.Black.copy(alpha = 0.4f),
                             shape = CircleShape
-                        ),
+                        )
+                        .clickable{
+                            // Write to the "home" destination's SavedStateHandle
+                            navController.getBackStackEntry("home")
+                                .savedStateHandle["selectedTab"] = currentTabIndex  // 0 (Home) or 3 (Profile)
+
+                            navController.navigate(
+                                "playmovie/${poster.playId}"
+                            )
+                        },
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(

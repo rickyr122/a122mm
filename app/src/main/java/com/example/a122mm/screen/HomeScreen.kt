@@ -122,11 +122,20 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
     }
 
     // Restore selected tab when coming back from detail page
-    val savedStateHandle = navController.currentBackStackEntry?.savedStateHandle
-    LaunchedEffect(savedStateHandle) {
-        savedStateHandle?.getLiveData<Int>("selectedTab")?.observeForever { tabIndex ->
-            selectedItem = tabIndex
-        }
+//    val savedStateHandle = navController.currentBackStackEntry?.savedStateHandle
+//    LaunchedEffect(savedStateHandle) {
+//        savedStateHandle?.getLiveData<Int>("selectedTab")?.observeForever { tabIndex ->
+//            selectedItem = tabIndex
+//        }
+//    }
+
+    LaunchedEffect(Unit) {
+        navController.getBackStackEntry("home")
+            .savedStateHandle
+            .getLiveData<Int>("selectedTab")
+            .observeForever { tabIndex ->
+                selectedItem = tabIndex
+            }
     }
 
     // Highlights state
@@ -616,7 +625,7 @@ fun ContentScreen(
                     query = searchQuery
 //                    onQueryChange = { /* handled in top bar already; wire later if needed */ }
                 )
-                2 -> HighlightsPage(modifier = pageModifier, activeCode = highlightsCode)
+                2 -> HighlightsPage(modifier = pageModifier, activeCode = highlightsCode, navController = navController )
                 3 -> ProfilePage(pageModifier, navController, onDominantColorExtracted, type = "PRO")
             }
         }
