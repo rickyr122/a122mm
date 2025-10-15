@@ -303,7 +303,8 @@ fun SearchPage(
 private fun RecRow(
     item: RecommendedItem,
     navController: NavController?,
-    onClick: () -> Unit
+    onRowClick: () -> Unit,    // for row/title/image click
+    onPlayClick: () -> Unit    // for play icon click
 ) {
     val configuration = LocalConfiguration.current
     val isTablet = configuration.screenWidthDp >= 600
@@ -311,22 +312,19 @@ private fun RecRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() },
+            .clickable { onRowClick() }, // whole row click (open detail)
         verticalAlignment = Alignment.CenterVertically
     ) {
         val cardSz = if (isTablet) 160.dp else 120.dp
+
+        // Thumbnail Card
         Card(
             shape = RoundedCornerShape(4.dp),
             colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A1A)),
             modifier = Modifier
                 .width(cardSz)
                 .aspectRatio(16f / 9f)
-                .clickable {
-                    navController?.currentBackStackEntry
-                        ?.savedStateHandle
-                        ?.set("selectedTab", 1)
-                    navController?.navigate("movie/${item.mId}")
-                }
+                .clickable { onRowClick() } // open detail
         ) {
             AsyncImage(
                 model = item.cvrUrl,
@@ -338,15 +336,11 @@ private fun RecRow(
 
         Spacer(Modifier.width(14.dp))
 
+        // Title + Tag
         Column(
             Modifier
                 .weight(1f)
-                .clickable {
-                    navController?.currentBackStackEntry
-                        ?.savedStateHandle
-                        ?.set("selectedTab", 1)
-                    navController?.navigate("movie/${item.mId}")
-                }
+                .clickable { onRowClick() } // same as card click
         ) {
             Text(
                 item.mTitle.fixEncoding(),
@@ -362,13 +356,14 @@ private fun RecRow(
 
         Spacer(Modifier.width(10.dp))
 
+        // Separate Play button click
         Box(
             modifier = Modifier
                 .size(36.dp)
                 .border(1.dp, Color.White.copy(alpha = 0.4f), CircleShape)
                 .clip(CircleShape)
                 .background(Color.Black)
-                .clickable { onClick() },
+                .clickable { onPlayClick() }, // separate handler
             contentAlignment = Alignment.Center
         ) {
             Icon(
@@ -449,7 +444,6 @@ private fun PosterGrid(
     }
 }
 
-
 @Composable
 private fun RecommendedSection(
     loading: Boolean,
@@ -480,12 +474,22 @@ private fun RecommendedSection(
         }
         else -> {
             items.forEachIndexed { idx, item ->
-                RecRow(item = item, navController) {
-                    navController?.currentBackStackEntry
-                        ?.savedStateHandle
-                        ?.set("selectedTab", 1)
-                    navController?.navigate("movie/${item.mId}")
-                }
+                RecRow(
+                    item = item,
+                    navController = navController,
+                    onRowClick = {
+                        // Open detail page
+                        navController?.getBackStackEntry("home")
+                            ?.savedStateHandle?.set("selectedTab", 1)
+                        navController?.navigate("movie/${item.mId}")
+                    },
+                    onPlayClick = {
+                        // Open player directly
+                        navController?.getBackStackEntry("home")
+                            ?.savedStateHandle?.set("selectedTab", 1)
+                        navController?.navigate("playmovie/${item.mId}")
+                    }
+                )
                 if (idx != items.lastIndex) Spacer(Modifier.height(12.dp))
             }
             Spacer(Modifier.height(24.dp))

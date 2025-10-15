@@ -289,6 +289,9 @@ fun ViewBanner(
                                 Log.d("Banner Id check", "mId -> ${banner.playId}")
                                 Button(
                                     onClick = {
+                                        // Open player directly
+                                        navController?.getBackStackEntry("home")
+                                            ?.savedStateHandle?.set("selectedTab", 0)
                                         navController.navigate(
                                             "playmovie/${banner.playId}"
                                         )
