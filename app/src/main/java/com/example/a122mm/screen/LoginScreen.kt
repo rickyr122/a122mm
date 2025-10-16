@@ -157,13 +157,14 @@ fun LoginScreen(modifier: Modifier = Modifier, navController: NavHostController)
                     ) {
                         Text(text = "Sign In",
                             fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold)
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White)
                     }
 
                     Spacer(modifier = Modifier.height(15.dp))
                     Text(text = "OR",
                         fontSize = 16.sp,
-                        color = Color.Gray,
+                        color = Color(0xFFC0C0C0),
                         style = TextStyle(
                             textAlign = TextAlign.Center
                         )
@@ -181,7 +182,8 @@ fun LoginScreen(modifier: Modifier = Modifier, navController: NavHostController)
                     ) {
                         Text(text = "Sign Up",
                             fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold)
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White)
                     }
                 }
             }

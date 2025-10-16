@@ -198,7 +198,8 @@ fun SignUpScreen(modifier: Modifier = Modifier, navController: NavHostController
                     ) {
                         Text(text = "START YOUR JOURNEY",
                             fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold)
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White)
                     }
                 }
             }
