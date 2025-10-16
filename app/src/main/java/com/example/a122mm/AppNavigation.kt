@@ -17,6 +17,7 @@ import com.example.a122mm.screen.HomeScreen
 import com.example.a122mm.screen.LoginScreen
 import com.example.a122mm.screen.MainPlayerScreen
 import com.example.a122mm.screen.SignUpScreen
+import com.example.a122mm.screen.SplashRoute
 import com.example.a122mm.screen.VideoPlayerScreen
 
 @Composable
@@ -24,7 +25,10 @@ fun AppNavigation(modifier: Modifier = Modifier) {
 
     val navController = rememberNavController()
 
-    NavHost(navController = navController  , startDestination = "login") {
+    NavHost(navController = navController  , startDestination = "splash") {
+        composable("splash") {
+            SplashRoute(navController)
+        }
 
         composable("auth") {
             AuthScreen(modifier,navController)

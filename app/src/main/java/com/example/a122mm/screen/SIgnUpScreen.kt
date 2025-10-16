@@ -12,9 +12,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedTextField
@@ -24,6 +26,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,6 +47,10 @@ import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import androidx.navigation.NavHostController
 import com.example.a122mm.R
+import com.example.a122mm.auth.AuthRepository
+import com.example.a122mm.auth.SignUpViewModel
+import com.example.a122mm.auth.TokenStore
+import com.example.a122mm.dataclass.AuthNetwork
 import com.example.a122mm.helper.setScreenOrientation
 
 @Composable
@@ -75,6 +82,17 @@ fun SignUpScreen(modifier: Modifier = Modifier, navController: NavHostController
         unfocusedBorderColor = Color.Gray,
         cursorColor = Color.Black
     )
+
+    val repo = remember {
+        AuthRepository(
+            publicApi = AuthNetwork.publicAuthApi,           // signup uses public API
+            authedApi = AuthNetwork.authedAuthApi(context),  // ready for protected later
+            store = TokenStore(context)
+        )
+    }
+
+    val vm = remember { SignUpViewModel(repo) }
+    val ui = vm.ui.collectAsState().value
 
     val view = LocalView.current
     val activity = LocalContext.current as Activity
@@ -187,20 +205,42 @@ fun SignUpScreen(modifier: Modifier = Modifier, navController: NavHostController
                     )
 
                     Spacer(modifier = Modifier.height(20.dp))
-                    Button(onClick = {
-
-                    },
+                    // --- Sign Up button: disable + show loader while signing up ---
+                    Button(
+                        onClick = { vm.doSignUp(email.trim(), name.trim(), password) },
+                        enabled = ui !is com.example.a122mm.auth.SignUpUiState.Loading &&
+                                email.isNotBlank() && name.isNotBlank() && password.isNotBlank(),
                         shape = RoundedCornerShape(3.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Color.Red),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(60.dp)
+                            .height(40.dp)
                     ) {
-                        Text(text = "START YOUR JOURNEY",
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White)
+                        if (ui is com.example.a122mm.auth.SignUpUiState.Loading) {
+                            CircularProgressIndicator(
+                                color = Color.White,
+                                strokeWidth = 2.dp,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        } else {
+                            Text(
+                                text = "START YOUR JOURNEY",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
                     }
+
+// Navigate back to login on success
+                    if (ui is com.example.a122mm.auth.SignUpUiState.Success) {
+                        LaunchedEffect(Unit) {
+                            navController.navigate("login") {
+                                popUpTo("signup") { inclusive = true }
+                            }
+                        }
+                    }
+
                 }
             }
 
