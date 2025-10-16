@@ -1,15 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-<!--    <style name="Theme._122mm" parent="android:Theme.Material.Light.NoActionBar" />-->
 
-<!-- your normal app theme -->
-<style name="Theme._122mm" parent="Theme.Material3.Dark.NoActionBar"/>
+    <!-- App theme (runs after splash) -->
+    <style name="Theme.A122mm" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="android:statusBarColor">@android:color/black</item>
+        <item name="android:navigationBarColor">@android:color/black</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:windowBackground">@android:color/black</item>
+    </style>
 
-<!-- Splash for pre-Android 12 -->
-<style name="Theme._122mm.Splash" parent="Theme.SplashScreen">
-    <!-- compat attrs (no android: prefix) -->
-    <item name="windowSplashScreenBackground">@color/black</item>
-    <item name="windowSplashScreenAnimatedIcon">@drawable/a122mm_logo</item>
-    <item name="postSplashScreenTheme">@style/Theme._122mm</item>
-</style>
+    <!-- Splash/launch theme (first frame before Compose) -->
+    <style name="Theme.A122mm.Splash" parent="Theme.SplashScreen">
+        <!-- Use compat attrs (no android: prefix) for splash-specific keys -->
+        <item name="windowSplashScreenBackground">@android:color/black</item>
+        <!-- If you don't have this icon yet, comment the line below -->
+        <!-- <item name="windowSplashScreenAnimatedIcon">@drawable/a122mm_logo</item> -->
+        <item name="postSplashScreenTheme">@style/Theme.A122mm</item>
+
+        <!-- Also keep bars black during splash -->
+        <item name="android:statusBarColor">@android:color/black</item>
+        <item name="android:navigationBarColor">@android:color/black</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+
 </resources>
+
+

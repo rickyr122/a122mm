@@ -2,6 +2,7 @@ package com.example.a122mm.screen
 
 import android.app.Activity
 import android.content.pm.ActivityInfo
+import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,9 +17,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.CircularProgressIndicator
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
@@ -40,7 +47,10 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -55,6 +65,7 @@ import com.example.a122mm.helper.setScreenOrientation
 
 @Composable
 fun SignUpScreen(modifier: Modifier = Modifier, navController: NavHostController) {
+
     val context = LocalContext.current
 
     LaunchedEffect(Unit) {
@@ -73,6 +84,8 @@ fun SignUpScreen(modifier: Modifier = Modifier, navController: NavHostController
         mutableStateOf("")
     }
 
+    var passwordVisible by remember { mutableStateOf(false) }
+
     val customColors = OutlinedTextFieldDefaults.colors(
         focusedTextColor = Color.Black,
         unfocusedTextColor = Color.Black,
@@ -80,7 +93,11 @@ fun SignUpScreen(modifier: Modifier = Modifier, navController: NavHostController
         unfocusedLabelColor = Color.Gray,
         focusedBorderColor = Color.Gray,
         unfocusedBorderColor = Color.Gray,
-        cursorColor = Color.Black
+        cursorColor = Color.Black,
+        errorTextColor = Color.Black,
+        errorLabelColor = Color.Red,
+        errorBorderColor = Color.Red,
+        errorCursorColor = Color.Black
     )
 
     val repo = remember {
@@ -89,6 +106,10 @@ fun SignUpScreen(modifier: Modifier = Modifier, navController: NavHostController
             authedApi = AuthNetwork.authedAuthApi(context),  // ready for protected later
             store = TokenStore(context)
         )
+    }
+
+    fun isValidEmail(email: String): Boolean {
+        return android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()
     }
 
     val vm = remember { SignUpViewModel(repo) }
@@ -112,6 +133,24 @@ fun SignUpScreen(modifier: Modifier = Modifier, navController: NavHostController
         // Navigation bar icons
         insetsController.isAppearanceLightNavigationBars = false // light icons for dark nav bar
     }
+
+    LaunchedEffect(ui) {
+        when (ui) {
+            is com.example.a122mm.auth.SignUpUiState.Success -> {
+                // go back to Login on successful signup
+                navController.navigate("login") {
+                    popUpTo("signup") { inclusive = true }
+                }
+                Toast.makeText(context, "Account created. Please sign in.", Toast.LENGTH_SHORT).show()
+            }
+            is com.example.a122mm.auth.SignUpUiState.Error -> {
+                // repo now surfaces server messages (e.g., "email already registered")
+                Toast.makeText(context, ui.msg, Toast.LENGTH_SHORT).show()
+            }
+            else -> Unit
+        }
+    }
+
 
     Scaffold (
         containerColor = Color.White,
@@ -161,19 +200,32 @@ fun SignUpScreen(modifier: Modifier = Modifier, navController: NavHostController
 
                     Spacer(modifier = Modifier.height(10.dp))
 
+                    var emailError by remember { mutableStateOf(false) }
 
-                    OutlinedTextField (
+                    OutlinedTextField(
                         value = email,
-                        maxLines = 1,
                         onValueChange = {
                             email = it
+                            emailError = !isValidEmail(it) && it.isNotEmpty()
                         },
-                        label = {
-                            Text(text = "Email")
-                        },
+                        label = { Text("Email") },
+                        singleLine = true,
                         colors = customColors,
-                        modifier = Modifier.fillMaxWidth()
+                        isError = emailError, // highlight border red
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Email,
+                            imeAction = ImeAction.Next
+                        )
                     )
+
+                    if (emailError) {
+                        Text(
+                            text = "Please enter a valid email address",
+                            color = Color.Red,
+                            fontSize = 12.sp
+                        )
+                    }
 
                     Spacer(modifier = Modifier.height(10.dp))
                     OutlinedTextField (
@@ -190,37 +242,57 @@ fun SignUpScreen(modifier: Modifier = Modifier, navController: NavHostController
                     )
 
                     Spacer(modifier = Modifier.height(10.dp))
-                    OutlinedTextField (
+                    OutlinedTextField(
                         value = password,
+                        onValueChange = { password = it },
+                        label = { Text("Password") },
                         maxLines = 1,
-                        onValueChange = {
-                            password = it
-                        },
-                        label = {
-                            Text(text = "Password")
-                        },
+                        singleLine = true,
                         colors = customColors,
                         modifier = Modifier.fillMaxWidth(),
-                        visualTransformation = PasswordVisualTransformation()
+                        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                Icon(
+                                    imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                    contentDescription = if (passwordVisible) "Hide password" else "Show password",
+                                    tint = Color.DarkGray
+                                )
+                            }
+                        },
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Password,
+                            imeAction = ImeAction.Done
+                        )
                     )
 
+
                     Spacer(modifier = Modifier.height(20.dp))
-                    // --- Sign Up button: disable + show loader while signing up ---
+                    val isLoading = ui is com.example.a122mm.auth.SignUpUiState.Loading
+
                     Button(
                         onClick = { vm.doSignUp(email.trim(), name.trim(), password) },
-                        enabled = ui !is com.example.a122mm.auth.SignUpUiState.Loading &&
-                                email.isNotBlank() && name.isNotBlank() && password.isNotBlank(),
+                        enabled = !isLoading &&
+                                    email.isNotBlank() &&
+                                    name.isNotBlank() &&
+                                    !emailError &&
+                                    password.isNotBlank(),
                         shape = RoundedCornerShape(3.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.Red),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color.Red,
+                            contentColor = Color.White,
+                            disabledContainerColor = Color.Red,   // keep red even when disabled
+                            disabledContentColor = Color.White    // keep white text/spinner
+                        ),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(40.dp)
+                            .height(48.dp)
                     ) {
-                        if (ui is com.example.a122mm.auth.SignUpUiState.Loading) {
+                        if (isLoading) {
                             CircularProgressIndicator(
-                                color = Color.White,
                                 strokeWidth = 2.dp,
-                                modifier = Modifier.size(18.dp)
+                                modifier = Modifier.size(18.dp),
+                                color = Color.White
                             )
                         } else {
                             Text(
@@ -232,7 +304,7 @@ fun SignUpScreen(modifier: Modifier = Modifier, navController: NavHostController
                         }
                     }
 
-// Navigate back to login on success
+                    // Navigate back to login on success
                     if (ui is com.example.a122mm.auth.SignUpUiState.Success) {
                         LaunchedEffect(Unit) {
                             navController.navigate("login") {

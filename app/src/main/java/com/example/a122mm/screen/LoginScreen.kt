@@ -16,9 +16,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.CircularProgressIndicator
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
@@ -39,7 +45,10 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -68,6 +77,8 @@ fun LoginScreen(modifier: Modifier = Modifier, navController: NavHostController)
         mutableStateOf("")
     }
 
+    var passwordVisible by remember { mutableStateOf(false) }
+
     val customColors = OutlinedTextFieldDefaults.colors(
         focusedTextColor = Color.White,
         unfocusedTextColor = Color.White,
@@ -87,7 +98,6 @@ fun LoginScreen(modifier: Modifier = Modifier, navController: NavHostController)
     }
     val vm = remember { LoginViewModel(repo) }
     val ui = vm.ui.collectAsState().value
-
 
     val view = LocalView.current
     val activity = LocalContext.current as Activity
@@ -149,18 +159,37 @@ fun LoginScreen(modifier: Modifier = Modifier, navController: NavHostController)
                     )
 
                     Spacer(modifier = Modifier.height(10.dp))
-                    OutlinedTextField (
+                    OutlinedTextField(
                         value = password,
+                        onValueChange = { password = it },
+                        label = { Text("Password") },
                         maxLines = 1,
-                        onValueChange = {
-                            password = it
-                        },
-                        label = {
-                            Text(text = "Password")
-                        },
+                        singleLine = true,
                         colors = customColors,
                         modifier = Modifier.fillMaxWidth(),
-                        visualTransformation = PasswordVisualTransformation()
+                        visualTransformation = if (passwordVisible)
+                            VisualTransformation.None
+                        else
+                            PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                Icon(
+                                    imageVector = if (passwordVisible)
+                                        Icons.Default.Visibility
+                                    else
+                                        Icons.Default.VisibilityOff,
+                                    contentDescription = if (passwordVisible)
+                                        "Hide password"
+                                    else
+                                        "Show password",
+                                    tint = Color.LightGray
+                                )
+                            }
+                        },
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Password,
+                            imeAction = ImeAction.Done
+                        )
                     )
 
                     Spacer(modifier = Modifier.height(20.dp))

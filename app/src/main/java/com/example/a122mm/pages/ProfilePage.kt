@@ -12,12 +12,14 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.example.a122mm.auth.ProfileViewModel2
 import com.example.a122mm.components.ProfileHeader
 import com.example.a122mm.components.ViewContent
 import com.example.a122mm.components.ViewContinue
@@ -65,6 +67,8 @@ fun ProfilePage(
         }
     }
 
+    val context = LocalContext.current
+    val vm: ProfileViewModel2 = viewModel()
 
     Column (
         modifier = modifier // ✅ use the passed-in modifier
@@ -74,7 +78,13 @@ fun ProfilePage(
     ) {
         ProfileHeader(
             modifier = Modifier.align(Alignment.CenterHorizontally),
-            onDominantColorExtracted = { onDominantColorExtracted(Color.Black) }
+            onDominantColorExtracted = { onDominantColorExtracted(Color.Black) },
+            onLogoutClicked = {
+                vm.logout(context)   // your ViewModel logout logic
+                navController.navigate("login") {
+                    popUpTo("home") { inclusive = true }
+                }
+            }
         )
 
         if (isLoading) {
