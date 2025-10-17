@@ -4,12 +4,9 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -58,22 +55,22 @@ fun ProfileHeader(
             modifier = Modifier.padding(top = 8.dp)
         )
 
-        // 🔹 Logout button
-        Button(
-            onClick = { onLogoutClicked() },
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color.Red,
-                contentColor = Color.White
-            ),
-            modifier = Modifier
-                .padding(top = 12.dp)
-                .height(36.dp)
-        ) {
-            Text(
-                text = "LOG OUT",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
+//        // 🔹 Logout button
+//        Button(
+//            onClick = { onLogoutClicked() },
+//            colors = ButtonDefaults.buttonColors(
+//                containerColor = Color.Red,
+//                contentColor = Color.White
+//            ),
+//            modifier = Modifier
+//                .padding(top = 12.dp)
+//                .height(36.dp)
+//        ) {
+//            Text(
+//                text = "LOG OUT",
+//                fontSize = 14.sp,
+//                fontWeight = FontWeight.Bold
+//            )
+//        }
     }
 }

@@ -35,6 +35,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
@@ -45,7 +46,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
@@ -57,19 +60,23 @@ import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.VideoLibrary
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
-import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -99,12 +106,15 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.a122mm.R
+import com.example.a122mm.auth.ProfileViewModel2
 import com.example.a122mm.dataclass.BottomNavItem
 import com.example.a122mm.helper.setScreenOrientation
 import com.example.a122mm.pages.HighlightsPage
@@ -115,6 +125,7 @@ import com.example.a122mm.pages.SearchPage
 import com.example.a122mm.pages.SeriesPage
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
     var selectedItem by remember { mutableStateOf(0) }
@@ -243,8 +254,7 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
 
     val focusManager = LocalFocusManager.current
 
-    val drawerState = rememberDrawerState(DrawerValue.Closed)
-    val drawerScope = rememberCoroutineScope()
+    var showLogoutSheet by rememberSaveable { mutableStateOf(false) }
 
     var showSettings by rememberSaveable { mutableStateOf(false) }
     BackHandler(enabled = showSettings) { showSettings = false }
@@ -262,28 +272,6 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
             .fillMaxSize()
             .background(backgroundBrush) // gradient behind EVERYTHING
     ) {
-        // Draw the drawer overlay manually
-//        if (drawerState.isOpen) {
-//            Box(
-//                modifier = Modifier
-//                    .fillMaxSize()
-//                    .background(Color.Black.copy(alpha = 0.96f))
-//                    .clickable(enabled = true, onClick = { drawerScope.launch { drawerState.close() } }),
-//            )
-//
-//            // Drawer content (full screen)
-//            SettingsDrawer(
-//                modifier = Modifier
-//                    .fillMaxSize()
-//                    .background(Color.Black)
-//                    .padding(horizontal = 24.dp, vertical = 16.dp),
-//                onBack = { drawerScope.launch { drawerState.close() } },
-//                onAccount = { /* TODO */ },
-//                onDeviceManager = { /* TODO */ },
-//                onLogout = { /* TODO */ }
-//            )
-//        }
-
         Scaffold(
             containerColor = Color.Transparent,
             topBar = {
@@ -572,10 +560,33 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
                     onBack = { showSettings = false },
                     onAccount = { /* TODO: navigate */ },
                     onDeviceManager = { /* TODO: navigate */ },
-                    onLogout = { /* TODO: logout */ }
+                    onLogout = { showLogoutSheet = true }
                 )
             }
         }
+        val vm: ProfileViewModel2 = viewModel()
+        if (showLogoutSheet) {
+            ModalBottomSheet(
+                onDismissRequest = { showLogoutSheet = false },
+                containerColor = Color(0xFF0F0F0F),
+                scrimColor = Color.Black.copy(alpha = 0.6f),
+                dragHandle = null,
+                shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
+            ) {
+                ConfirmLogoutSheet(
+                    onClose = { showLogoutSheet = false },
+                    onConfirm = {
+                        showLogoutSheet = false
+                        // ✅ your actual logout flow
+                        vm.logout(context)
+                        navController.navigate("login") {
+                            popUpTo("home") { inclusive = true }
+                        }
+                    }
+                )
+            }
+        }
+
     }
 }
 
@@ -702,6 +713,105 @@ fun SettingsDrawer(
     }
 }
 
+@Composable
+fun ConfirmLogoutSheet(
+    onClose: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    var isLoading by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // Close (X) in top-right
+        Box(Modifier.fillMaxWidth()) {
+            Icon(
+                imageVector = Icons.Default.Close,
+                contentDescription = "Close",
+                tint = Color(0xAAFFFFFF),
+                modifier = Modifier
+                    .size(24.dp)
+                    .align(Alignment.TopEnd)
+                    .clickable { onClose() }
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+
+        // Illustration / Icon
+        Box(
+            modifier = Modifier
+                .size(96.dp)
+                .background(Color(0xFF1A1A1A), RoundedCornerShape(16.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.Logout, // swap with custom painter if you like
+                contentDescription = null,
+                tint = Color(0xFFE56B6F),
+                modifier = Modifier.size(36.dp)
+            )
+        }
+
+        Spacer(Modifier.height(18.dp))
+        Text(
+            text = "Are you sure you want to sign out?",
+            color = Color.White,
+            fontSize = 18.sp,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = "You will be asked to sign in again to watch your favourites.",
+            color = Color(0xFFB3B3B3),
+            fontSize = 14.sp,
+            textAlign = TextAlign.Center,                 // ✅ center-align text
+            modifier = Modifier.fillMaxWidth()            // ✅ let it take full width
+        )
+        Spacer(Modifier.height(18.dp))
+
+        Button(
+            onClick = {
+                if (!isLoading) {
+                    isLoading = true
+                    onConfirm()   // triggers your logout logic
+                }
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(50.dp),
+            shape = RoundedCornerShape(3.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE50914)), // 🔴 red
+            enabled = !isLoading
+        ) {
+            if (isLoading) {
+                CircularProgressIndicator(
+                    color = Color.White,
+                    strokeWidth = 2.dp,
+                    modifier = Modifier.size(22.dp)
+                )
+            } else {
+                Text("Sign Out", color = Color.White, fontSize = 16.sp)
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        // Cancel
+        TextButton(
+            onClick = onClose,
+            modifier = Modifier.fillMaxWidth().height(48.dp)
+        ) {
+            Text("Cancel", color = Color(0xFFB3B3B3), fontSize = 16.sp)
+        }
+
+        Spacer(Modifier.height(12.dp))
+    }
+}
 
 
 @OptIn(ExperimentalAnimationApi::class)
