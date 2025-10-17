@@ -5,6 +5,7 @@ import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
@@ -37,19 +38,30 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.VideoLibrary
+import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.Devices
+import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.VideoLibrary
+import androidx.compose.material3.Divider
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
@@ -57,6 +69,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -85,6 +98,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -229,6 +243,13 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
 
     val focusManager = LocalFocusManager.current
 
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val drawerScope = rememberCoroutineScope()
+
+    var showSettings by rememberSaveable { mutableStateOf(false) }
+    BackHandler(enabled = showSettings) { showSettings = false }
+
+
     LaunchedEffect(selectedItem, scrollState.isScrollInProgress) {
         if (selectedItem == 1 && scrollState.isScrollInProgress) {
             focusManager.clearFocus()
@@ -241,6 +262,28 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
             .fillMaxSize()
             .background(backgroundBrush) // gradient behind EVERYTHING
     ) {
+        // Draw the drawer overlay manually
+//        if (drawerState.isOpen) {
+//            Box(
+//                modifier = Modifier
+//                    .fillMaxSize()
+//                    .background(Color.Black.copy(alpha = 0.96f))
+//                    .clickable(enabled = true, onClick = { drawerScope.launch { drawerState.close() } }),
+//            )
+//
+//            // Drawer content (full screen)
+//            SettingsDrawer(
+//                modifier = Modifier
+//                    .fillMaxSize()
+//                    .background(Color.Black)
+//                    .padding(horizontal = 24.dp, vertical = 16.dp),
+//                onBack = { drawerScope.launch { drawerState.close() } },
+//                onAccount = { /* TODO */ },
+//                onDeviceManager = { /* TODO */ },
+//                onLogout = { /* TODO */ }
+//            )
+//        }
+
         Scaffold(
             containerColor = Color.Transparent,
             topBar = {
@@ -357,6 +400,17 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
                                         logoBottomPx = (position.y + height).toInt()
                                     }
                             )
+
+                            if (selectedItem == 3) {
+                                Icon(
+                                    imageVector = Icons.Filled.Menu, // or painterResource(R.drawable.ic_menu)
+                                    contentDescription = "Menu",
+                                    tint = Color.White,
+                                    modifier = Modifier
+                                        .size(if (isTablet) 36.dp else 28.dp)
+                                        .clickable { showSettings = true  }
+                                )
+                            }
                         }
 
                         // HIGHLIGHTS pills (tab 2)
@@ -483,8 +537,172 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
                 )
             }
         }
+
+        AnimatedVisibility(
+            visible = showSettings,
+            enter = fadeIn(),
+            exit = fadeOut()
+        ) {
+            // Scrim
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.6f))
+                    .clickable { showSettings = false }  // tap outside to close
+            )
+        }
+
+        // Panel itself (on top; separate AnimatedVisibility so it slides independently)
+        AnimatedVisibility(
+            visible = showSettings,
+            enter = slideInHorizontally(initialOffsetX = { it }) + fadeIn(),
+            exit  = slideOutHorizontally(targetOffsetX = { it }) + fadeOut()
+        ) {
+            // The sheet content
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()          // full screen
+                    .background(Color.Black) // solid like your screenshot
+                    .padding(WindowInsets.systemBars.asPaddingValues()) // ⬅️ add this line
+            ) {
+                SettingsDrawer(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    onBack = { showSettings = false },
+                    onAccount = { /* TODO: navigate */ },
+                    onDeviceManager = { /* TODO: navigate */ },
+                    onLogout = { /* TODO: logout */ }
+                )
+            }
+        }
     }
 }
+
+@Composable
+fun SettingsDrawer(
+    modifier: Modifier = Modifier,
+    onBack: () -> Unit,
+    onAccount: () -> Unit,
+    onDeviceManager: () -> Unit,
+    onLogout: () -> Unit
+) {
+    Column(
+        modifier = modifier
+            .background(Color(0xFF0F0F0F))
+            .fillMaxSize()
+            .padding(horizontal = 16.dp)
+    ) {
+        Spacer(Modifier.height(12.dp))
+
+        // Header: back + title
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .height(48.dp)
+                .fillMaxWidth()
+                .padding(start = 8.dp) // ⬅️ added left padding
+        ) {
+            Icon(
+                imageVector = Icons.Default.ArrowBack,
+                contentDescription = "Back",
+                tint = Color.White,
+                modifier = Modifier
+                    .size(24.dp)
+                    .clickable { onBack() }
+            )
+            Spacer(Modifier.width(12.dp))
+            Text(
+                "Settings",
+                color = Color.White,
+                fontSize = 18.sp
+            )
+        }
+
+        Divider(color = Color(0x22FFFFFF))
+        Spacer(Modifier.height(8.dp))
+
+        // Account Settings
+        ListItem(
+            headlineContent = { Text("Account Settings", color = Color.White) },
+            supportingContent = { Text("Email & account details", color = Color(0xFFB3B3B3)) },
+            leadingContent = {
+                Icon(
+                    imageVector = Icons.Outlined.Person,
+                    contentDescription = null,
+                    tint = Color.White
+                )
+            },
+            trailingContent = {
+                Icon(
+                    imageVector = Icons.Outlined.ChevronRight,
+                    contentDescription = null,
+                    tint = Color(0x66FFFFFF)
+                )
+            },
+            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+            modifier = Modifier.clickable { onAccount() }
+        )
+
+        Divider(color = Color(0x22FFFFFF))
+
+        // Device Manager
+        ListItem(
+            headlineContent = { Text("Device Manager", color = Color.White) },
+            supportingContent = { Text("Manage logged-in devices", color = Color(0xFFB3B3B3)) },
+            leadingContent = {
+                Icon(
+                    imageVector = Icons.Outlined.Devices,
+                    contentDescription = null,
+                    tint = Color.White
+                )
+            },
+            trailingContent = {
+                Icon(
+                    imageVector = Icons.Outlined.ExpandMore,
+                    contentDescription = null,
+                    tint = Color(0x66FFFFFF)
+                )
+            },
+            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+            modifier = Modifier.clickable { onDeviceManager() }
+        )
+
+        Spacer(Modifier.weight(1f))
+        //Divider(color = Color(0x22FFFFFF))
+        //Spacer(Modifier.height(12.dp))
+
+        // 🔥 LOG OUT button (red block)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(50.dp)
+                .background(Color(0xFFE50914), shape = RoundedCornerShape(3.dp)) // Netflix red
+                .clickable { onLogout() },
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                "Sign Out",
+                color = Color.White,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        // Version info
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = "Version: 1.0.0 build 1",
+            color = Color(0xFFAAAAAA),
+            fontSize = 12.sp,
+            modifier = Modifier.align(Alignment.CenterHorizontally)
+        )
+
+        Spacer(Modifier.height(8.dp))
+    }
+}
+
+
 
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
