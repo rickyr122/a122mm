@@ -47,9 +47,9 @@ sealed interface LoginUiState {
 
 class SignUpViewModel(private val repo: AuthRepository) : ViewModel() {
     val ui = MutableStateFlow<SignUpUiState>(SignUpUiState.Idle)
-    fun doSignUp(email: String, name: String, password: String) = viewModelScope.launch {
+    fun doSignUp(email: String, name: String, password: String, clientTime: String) = viewModelScope.launch {
         ui.value = SignUpUiState.Loading
-        repo.signup(email, name, password)
+        repo.signup(email, name, password, clientTime)
             .onSuccess { ui.value = SignUpUiState.Success }
             .onFailure { ui.value = SignUpUiState.Error(it.message ?: "Sign up error") }
     }

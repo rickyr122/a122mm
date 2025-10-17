@@ -25,7 +25,7 @@ class AuthRepository(
         }
     }
 
-    suspend fun signup(email: String, name: String, password: String): Result<Unit> {
+    suspend fun signup(email: String, name: String, password: String, clientTime: String): Result<Unit> {
         return try {
             val resp = publicApi.signup(SignUpReq(email, name, password))
             if (resp.isSuccessful) {
