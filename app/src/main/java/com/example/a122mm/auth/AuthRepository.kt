@@ -73,10 +73,18 @@ class AuthRepository(
         else Result.failure(Exception("Device upsert failed: ${resp.code()}"))
     }
 
-
-
     suspend fun hasSession(): Boolean = store.access()?.isNotBlank() == true
     suspend fun logout() = store.clear()
+
+    suspend fun loadProfilePic(): Result<String> {
+        val resp = authedApi.getProfilePic()
+        return if (resp.isSuccessful && resp.body() != null) {
+            Result.success(resp.body()!!.pp_link)
+        } else {
+            Result.failure(Exception("Failed to load profile picture"))
+        }
+    }
+
 }
 
 /** Pulls "error" from server JSON; falls back to friendly per-code message. */

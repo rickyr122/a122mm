@@ -22,6 +22,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,6 +32,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -69,9 +71,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -113,6 +112,8 @@ import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.example.a122mm.R
 import com.example.a122mm.auth.ProfileViewModel2
 import com.example.a122mm.dataclass.BottomNavItem
@@ -265,6 +266,25 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
             focusManager.clearFocus()
         }
     }
+
+    // Build repo once per composition (same way you do elsewhere)
+    //val context = LocalContext.current
+    val repo = remember {
+        com.example.a122mm.auth.AuthRepository(
+            publicApi = com.example.a122mm.dataclass.AuthNetwork.publicAuthApi,
+            authedApi = com.example.a122mm.dataclass.AuthNetwork.authedAuthApi(context),
+            store = com.example.a122mm.auth.TokenStore(context)
+        )
+    }
+
+    var profileUrl by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(Unit) {
+        repo.loadProfilePic()
+            .onSuccess { profileUrl = it }
+            .onFailure { profileUrl = null } // fall back to local avatar
+    }
+
 
     // ====== LAYOUT ======
     Box(
@@ -423,66 +443,27 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
                     }
                 }
             },
+
             bottomBar = {
-                NavigationBar(
-                    containerColor = Color.Black,
+                NoRippleBottomBar(
+                    items = navItems,
+                    selectedIndex = selectedItem,
+                    onSelect = { index ->
+                        if (index == 1) {
+                            if (selectedItem != 1) lastNonSearchTab = selectedItem
+                            selectedItem = 1
+                        } else {
+                            lastNonSearchTab = index
+                            selectedItem = index
+                        }
+                    },
+                    profileUrl = profileUrl,   // ✅ pass the fetched URL here
                     modifier = Modifier
-                        .fillMaxWidth()
                         .padding(
                             start = navBars.calculateStartPadding(layoutDirection),
                             end = navBars.calculateEndPadding(layoutDirection)
                         )
-                ) {
-                    navItems.forEachIndexed { index, item ->
-                        val isSelected = selectedItem == index
-                        val isProfile = item.label == "My Room"
-
-                        NavigationBarItem(
-                            selected = isSelected,
-                            onClick = {
-                                if (index == 1) {
-                                    if (selectedItem != 1) lastNonSearchTab = selectedItem
-                                    selectedItem = 1
-                                } else {
-                                    lastNonSearchTab = index
-                                    selectedItem = index
-                                }
-                            },
-                            icon = {
-                                if (item.isImage) {
-                                    Image(
-                                        painter = painterResource(id = R.drawable.spiderman),
-                                        contentDescription = "Profile",
-                                        modifier = Modifier
-                                            .size(24.dp)
-                                            .clip(CircleShape)
-                                            .then(
-                                                if (isSelected && isProfile) Modifier.border(1.dp, Color.White, CircleShape)
-                                                else Modifier
-                                            ),
-                                        contentScale = ContentScale.Crop
-                                    )
-                                } else {
-                                    Icon(
-                                        imageVector = if (isSelected) item.selectedIcon else item.unselectedIcon,
-                                        contentDescription = item.label,
-                                        tint = if (isSelected) Color.White else Color.Gray
-                                    )
-                                }
-                            },
-                            label = {
-                                Text(
-                                    text = item.label,
-                                    color = if (isSelected) Color.White else Color.Gray
-                                )
-                            },
-                            alwaysShowLabel = true,
-                            colors = NavigationBarItemDefaults.colors(
-                                indicatorColor = Color.Black
-                            )
-                        )
-                    }
-                }
+                )
             }
         ) { innerPadding ->
             Box(
@@ -959,3 +940,82 @@ fun ContentScreen(
         }
     }
 }
+
+@Composable
+fun NoRippleBottomBar(
+    items: List<BottomNavItem>,
+    selectedIndex: Int,
+    onSelect: (Int) -> Unit,
+    profileUrl: String?,                // ✅ new param
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(Color.Black)
+            .navigationBarsPadding()   // keep above system nav bar
+            .height(72.dp)             // 72dp is Material3 default bar height
+            .padding(horizontal = 4.dp),
+        horizontalArrangement = Arrangement.Start,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        items.forEachIndexed { index, item ->
+            val isSelected = selectedIndex == index
+            val isProfile = item.label == "My Room"
+
+            // each cell gets equal space
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .clickable(
+                        indication = null, // no ripple
+                        interactionSource = remember { MutableInteractionSource() }
+                    ) { onSelect(index) },
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    if (item.isImage) {
+                        AsyncImage(
+                            model = ImageRequest.Builder(LocalContext.current)
+                                .data(profileUrl ?: R.drawable.pp_default)
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = "Profile",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .size(26.dp)
+                                .clip(CircleShape)
+                                .then(
+                                    if (isSelected && isProfile)
+                                        Modifier.border(1.dp, Color.White, CircleShape)
+                                    else Modifier
+                                )
+                        )
+                    } else {
+                        Icon(
+                            imageVector = if (isSelected) item.selectedIcon else item.unselectedIcon,
+                            contentDescription = item.label,
+                            tint = if (isSelected) Color.White else Color.Gray,
+                            modifier = Modifier.size(26.dp)
+                        )
+                    }
+
+                    Spacer(Modifier.height(4.dp))
+
+                    Text(
+                        text = item.label,
+                        color = if (isSelected) Color.White else Color.Gray,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Normal
+                    )
+                }
+            }
+        }
+    }
+
+}
+

@@ -15,12 +15,17 @@ interface AuthApiService {
     @POST("refresh.php")
     suspend fun refresh(@Body body: Map<String, String>): Response<TokenRes>
 
-    @GET("profile.php")
-    suspend fun profile(): Response<ProfileRes>
-
     @POST("device_upsert.php")
     suspend fun upsertDevice(
         @Body body: Map<String, String>
     ): Response<Map<String, Any>>
+
+    @GET("profile.php")
+    suspend fun profile(): Response<ProfileRes>
+
+    @GET("get_profilepic.php")
+    suspend fun getProfilePic(): retrofit2.Response<ProfilePicRes>
+
+    data class ProfilePicRes(val pp_link: String)
 
 }
