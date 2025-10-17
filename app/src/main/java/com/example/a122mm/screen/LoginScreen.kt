@@ -198,7 +198,7 @@ fun LoginScreen(modifier: Modifier = Modifier, navController: NavHostController)
                     val isLoading = ui is com.example.a122mm.auth.LoginUiState.Loading
 
                     Button(
-                        onClick = { vm.doLogin(email.trim(), password) },
+                        onClick = { vm.doLogin(context, email.trim(), password) },
                         enabled = email.isNotBlank() && password.isNotBlank(), // stays red even if disabled
                         shape = RoundedCornerShape(3.dp),
                         colors = ButtonDefaults.buttonColors(

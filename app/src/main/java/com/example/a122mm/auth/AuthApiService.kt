@@ -17,4 +17,10 @@ interface AuthApiService {
 
     @GET("profile.php")
     suspend fun profile(): Response<ProfileRes>
+
+    @POST("device_upsert.php")
+    suspend fun upsertDevice(
+        @Body body: Map<String, String>
+    ): Response<Map<String, Any>>
+
 }

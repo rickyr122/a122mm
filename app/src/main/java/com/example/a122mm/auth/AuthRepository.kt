@@ -55,6 +55,26 @@ class AuthRepository(
         }
     }
 
+    suspend fun registerDevice(
+        deviceId: String,
+        deviceName: String,
+        deviceType: String,
+        clientTime: String
+    ): Result<Unit> {
+        val resp = authedApi.upsertDevice(
+            mapOf(
+                "device_id" to deviceId,
+                "device_name" to deviceName,
+                "device_type" to deviceType,
+                "last_active" to clientTime
+            )
+        )
+        return if (resp.isSuccessful) Result.success(Unit)
+        else Result.failure(Exception("Device upsert failed: ${resp.code()}"))
+    }
+
+
+
     suspend fun hasSession(): Boolean = store.access()?.isNotBlank() == true
     suspend fun logout() = store.clear()
 }
@@ -80,3 +100,6 @@ private fun extractError(code: Int, rawBody: String?): String {
         else -> "Error $code"
     }
 }
+
+
+

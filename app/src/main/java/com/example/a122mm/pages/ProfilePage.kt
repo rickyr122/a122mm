@@ -9,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -19,13 +20,21 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.example.a122mm.auth.AuthRepository
 import com.example.a122mm.auth.ProfileViewModel2
+import com.example.a122mm.auth.TokenStore
 import com.example.a122mm.components.ProfileHeader
 import com.example.a122mm.components.ViewContent
 import com.example.a122mm.components.ViewContinue
 import com.example.a122mm.components.ViewRecentWatch
+import com.example.a122mm.dataclass.AuthNetwork
 import com.example.a122mm.dataclass.ProfileSection
 import com.example.a122mm.dataclass.ProfileViewModel
+import com.example.a122mm.utility.getDeviceId
+import com.example.a122mm.utility.getDeviceName
+import com.example.a122mm.utility.getDeviceType
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 
 @Composable
 fun ProfilePage(
@@ -55,7 +64,7 @@ fun ProfilePage(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-// ✅ Keep your existing collector; just also set black when refreshing
+    // ✅ Keep your existing collector; just also set black when refreshing
     LaunchedEffect(navController) {
         val handle = navController.currentBackStackEntry?.savedStateHandle ?: return@LaunchedEffect
         handle.getStateFlow("refreshContent", false).collect { shouldRefresh ->
@@ -69,6 +78,27 @@ fun ProfilePage(
 
     val context = LocalContext.current
     val vm: ProfileViewModel2 = viewModel()
+
+    // Build the repo once per composition
+    val repo = remember {
+        AuthRepository(
+            publicApi = AuthNetwork.publicAuthApi,
+            authedApi = AuthNetwork.authedAuthApi(context),
+            store = TokenStore(context)
+        )
+    }
+
+    LaunchedEffect(Unit) {
+        val did = getDeviceId(context)
+        val dname = getDeviceName()
+        val dtype = getDeviceType(context)
+
+        val clientTime = LocalDateTime.now()
+            .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+
+        repo.registerDevice(did, dname, dtype, clientTime)
+    }
+
 
     Column (
         modifier = modifier // ✅ use the passed-in modifier
