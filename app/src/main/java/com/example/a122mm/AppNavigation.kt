@@ -9,6 +9,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.example.a122mm.auth.RequireAuth
 import com.example.a122mm.components.ViewMovieDetail
 import com.example.a122mm.dataclass.HomeViewModel
 import com.example.a122mm.helper.fixEncoding
@@ -21,9 +22,11 @@ import com.example.a122mm.screen.SplashRoute
 import com.example.a122mm.screen.VideoPlayerScreen
 
 @Composable
-fun AppNavigation(modifier: Modifier = Modifier) {
+fun AppNavigation(
+    navController: androidx.navigation.NavHostController,
+    modifier: Modifier = Modifier) {
 
-    val navController = rememberNavController()
+    //val navController = rememberNavController()
 
     NavHost(navController = navController  , startDestination = "splash") {
         composable("splash") {
@@ -70,12 +73,14 @@ fun AppNavigation(modifier: Modifier = Modifier) {
             val subtitleUrl = backStackEntry.arguments?.getString("subtitleUrl")
             val title = backStackEntry.arguments?.getString("title") ?: ""
 
-            VideoPlayerScreen(
-                videoUrl = videoUrl,
-                subtitleUrl = subtitleUrl,
-                tTitle = title, // 👈 Add this
-                navController = navController
-            )
+           RequireAuth(navController) {
+               VideoPlayerScreen(
+                   videoUrl = videoUrl,
+                   subtitleUrl = subtitleUrl,
+                   tTitle = title, // 👈 Add this
+                   navController = navController
+               )
+           }
         }
 
         composable(
@@ -85,10 +90,13 @@ fun AppNavigation(modifier: Modifier = Modifier) {
             )
         ) { backStackEntry ->
             val videoCode = backStackEntry.arguments?.getString("mId") ?: ""
-            MainPlayerScreen(
-                videoCode = videoCode,
-                navController = navController
-            )
+
+            RequireAuth(navController) {
+                MainPlayerScreen(
+                    videoCode = videoCode,
+                    navController = navController
+                )
+            }
         }
 
     }

@@ -2,11 +2,31 @@ package com.example.a122mm.dataclass
 
 import android.content.Context
 import com.example.a122mm.auth.AuthApiService
+import com.example.a122mm.auth.SessionManager
 import com.example.a122mm.auth.TokenStore
 import com.example.a122mm.components.ApiService
 import com.example.a122mm.components.MovieApiService
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+
+// Small helper to read the `exp` claim from a JWT (no crypto, just decode)
+private fun jwtExpSeconds(jwt: String?): Long? {
+    if (jwt.isNullOrBlank()) return null
+    val parts = jwt.split(".")
+    if (parts.size != 3) return null
+    return try {
+        val payload = android.util.Base64.decode(parts[1], android.util.Base64.URL_SAFE or android.util.Base64.NO_PADDING or android.util.Base64.NO_WRAP)
+        val json = String(payload, Charsets.UTF_8)
+        val exp = Regex(""""exp"\s*:\s*(\d+)""").find(json)?.groupValues?.get(1)?.toLong()
+        exp
+    } catch (_: Throwable) { null }
+}
+
+private fun isTokenExpired(access: String?): Boolean {
+    val exp = jwtExpSeconds(access) ?: return false
+    val now = System.currentTimeMillis() / 1000
+    return exp <= now
+}
 
 object NetworkModule {
     val retrofit: Retrofit by lazy {
@@ -47,32 +67,44 @@ object AuthNetwork {
 
         val authInterceptor = okhttp3.Interceptor { chain ->
             val access = kotlinx.coroutines.runBlocking { tokenStore.access() }
+
             val req = chain.request().newBuilder().apply {
                 if (!access.isNullOrBlank()) header("Authorization", "Bearer $access")
             }.build()
-            chain.proceed(req)
+
+            val res = chain.proceed(req)
+
+            if (res.code == 401) {
+                // Decide reason before clearing the token
+                val reason = when {
+                    isTokenExpired(access) -> com.example.a122mm.auth.LogoutReason.TOKEN_EXPIRED
+                    else -> com.example.a122mm.auth.LogoutReason.REMOTE_LOGOUT
+                }
+
+                // Don’t close/consume the body here
+                kotlinx.coroutines.runBlocking { tokenStore.clear() }
+                com.example.a122mm.auth.SessionManager.broadcastLogout(reason)
+            }
+
+            res
         }
 
-        // ← add logging only when app is debuggable at runtime
+
         val logging = okhttp3.logging.HttpLoggingInterceptor().apply {
-            level = if (isDebuggable(context))
-                okhttp3.logging.HttpLoggingInterceptor.Level.BODY
-            else
-                okhttp3.logging.HttpLoggingInterceptor.Level.NONE
+            // use the runtime debuggable check you added earlier, or set BODY while debugging
+            level = okhttp3.logging.HttpLoggingInterceptor.Level.BODY
         }
 
         val client = okhttp3.OkHttpClient.Builder()
-            .addInterceptor(logging)         // raw request/response in Logcat ("OkHttp")
-            .addInterceptor(authInterceptor) // attach Bearer token
+            .addInterceptor(logging)         // optional, for debugging
+            .addInterceptor(authInterceptor) // attaches token and handles 401
             .build()
 
-        val gson = com.google.gson.GsonBuilder()
-            .setLenient()                    // tolerate minor JSON issues
-            .create()
+        val gson = com.google.gson.GsonBuilder().setLenient().create()
 
         return retrofit2.Retrofit.Builder()
             .baseUrl("http://restfulapi.mooo.com/api/")
-            .addConverterFactory(NullOnEmptyConverterFactory()) // optional safety
+            .addConverterFactory(NullOnEmptyConverterFactory())
             .addConverterFactory(retrofit2.converter.gson.GsonConverterFactory.create(gson))
             .client(client)
             .build()

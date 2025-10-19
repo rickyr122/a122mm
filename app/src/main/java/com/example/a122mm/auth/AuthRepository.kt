@@ -129,6 +129,16 @@ class AuthRepository(
         else Result.failure(Exception("HTTP ${r.code()}"))
     }
 
+    suspend fun pingAuth(): Boolean {
+        return try {
+            val r = authedApi.me()
+            r.isSuccessful
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
+
 }
 
 /** Pulls "error" from server JSON; falls back to friendly per-code message. */

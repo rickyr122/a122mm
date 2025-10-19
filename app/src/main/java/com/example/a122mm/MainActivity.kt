@@ -2,6 +2,7 @@
 
 import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -10,12 +11,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalContext
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowCompat
+import com.example.a122mm.auth.SessionManager
 import com.example.a122mm.ui.theme.A122mmTheme
 
     class MainActivity : ComponentActivity() {
@@ -39,12 +43,33 @@ import com.example.a122mm.ui.theme.A122mmTheme
 
             setContent {
                 val dark = isSystemInDarkTheme()
+                val navController = androidx.navigation.compose.rememberNavController()
 
                 Box(
                     modifier = androidx.compose.ui.Modifier
                         .fillMaxSize()
                         .background(androidx.compose.ui.graphics.Color.Black)
                 ) {
+
+                    val context = LocalContext.current
+
+                    LaunchedEffect(Unit) {
+                        SessionManager.logoutFlow.collect { reason ->
+                            val msg = when (reason) {
+                                com.example.a122mm.auth.LogoutReason.TOKEN_EXPIRED ->
+                                    "Your session expired. Please sign in again."
+                                com.example.a122mm.auth.LogoutReason.REMOTE_LOGOUT ->
+                                    "You were logged out from another device."
+                                else -> "You’ve been signed out."
+                            }
+                            Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+
+                            navController.navigate("login") {
+                                popUpTo(0) { inclusive = true }
+                            }
+                        }
+                    }
+
                     A122mmTheme {
                         // Keep your Scaffold / Nav
                         Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
@@ -62,7 +87,10 @@ import com.example.a122mm.ui.theme.A122mmTheme
                                 }
                             }
 
-                            AppNavigation(Modifier.padding(innerPadding))
+                            AppNavigation(
+                                navController = navController,
+                                Modifier.padding(innerPadding)
+                            )
                         }
                     }
                 }

@@ -3,6 +3,7 @@ package com.example.a122mm.screen
 import android.app.Activity
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -126,7 +127,9 @@ import com.example.a122mm.pages.ProfilePage
 import com.example.a122mm.pages.SearchPage
 import com.example.a122mm.pages.SeriesPage
 import com.example.a122mm.utility.getDeviceId
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 // Local state to hold devices
 data class UiDevice(
@@ -286,6 +289,31 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
             authedApi = com.example.a122mm.dataclass.AuthNetwork.authedAuthApi(context),
             store = com.example.a122mm.auth.TokenStore(context)
         )
+    }
+    // ✅ Auto-check session validity when HomeScreen opens
+    LaunchedEffect(Unit) {
+        try {
+            val hasLocal = withContext(Dispatchers.IO) { repo.hasSession() }
+            if (!hasLocal) {
+                navController.navigate("login") {
+                    popUpTo("home") { inclusive = true }
+                }
+                return@LaunchedEffect
+            }
+
+            val ok = withContext(Dispatchers.IO) { repo.pingAuth() }
+            if (!ok) {
+                Toast.makeText(context, "Session expired. Please log in again.", Toast.LENGTH_LONG).show()
+                navController.navigate("login") {
+                    popUpTo("home") { inclusive = true }
+                }
+            }
+        } catch (t: Throwable) {
+            Toast.makeText(context, "Session check failed.", Toast.LENGTH_SHORT).show()
+            navController.navigate("login") {
+                popUpTo("home") { inclusive = true }
+            }
+        }
     }
 
     var profileUrl by remember { mutableStateOf<String?>(null) }
@@ -748,53 +776,21 @@ fun SettingsDrawer(
                         shape = RoundedCornerShape(16.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Column(Modifier.padding(14.dp)) {
-                            Text("Other Devices", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                            Spacer(Modifier.height(10.dp))
+                        Column(
+                            modifier = Modifier
+                                .padding(horizontal = 14.dp, vertical = 12.dp)
+                                .fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Text(
+                                "Other Devices",
+                                color = Color.White,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
 
-                            // ▼▼ Add this action row ▼▼
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-                                TextButton(
-                                    onClick = {
-                                        scope.launch {
-                                            loadingDevices = true
-                                            loadError = null
-                                            try {
-                                                val thisId = getDeviceId(context)
-                                                // call the repo method that hits logout_others.php
-                                                repo.logoutOtherDevices(thisId).onFailure { throw it }
-
-                                                // refresh list
-                                                repo.listDevices()
-                                                    .onSuccess { list ->
-                                                        devices = list.map {
-                                                            UiDevice(
-                                                                deviceId = it.device_id,
-                                                                deviceName = it.device_name,
-                                                                deviceType = it.device_type,
-                                                                lastActive = it.last_active,
-                                                                isThisDevice = (it.device_id == thisId)
-                                                            )
-                                                        }
-                                                    }
-                                                    .onFailure { throw it }
-                                            } catch (e: Exception) {
-                                                loadError = e.message ?: "Failed to refresh"
-                                            } finally {
-                                                loadingDevices = false
-                                            }
-                                        }
-                                    },
-                                    enabled = !loadingDevices
-                                ) {
-
-                                }
-                            }
-                            // ▲▲ End added section ▲▲
-
-                            Spacer(Modifier.height(6.dp))
-
-                            others.forEachIndexed { i, dev ->
+                            // No extra Spacer here 👇
+                            others.forEach { dev ->
                                 DeviceRow(
                                     device = dev,
                                     onLogout = {
@@ -803,10 +799,9 @@ fun SettingsDrawer(
                                             loadError = null
                                             try {
                                                 repo.logoutDevice(dev.deviceId).onFailure { throw it }
-
+                                                val thisId = getDeviceId(context)
                                                 repo.listDevices()
                                                     .onSuccess { list ->
-                                                        val thisId = getDeviceId(context)
                                                         devices = list.map {
                                                             UiDevice(
                                                                 deviceId = it.device_id,
@@ -826,9 +821,6 @@ fun SettingsDrawer(
                                         }
                                     }
                                 )
-                                if (i != others.lastIndex) {
-                                    Spacer(Modifier.height(10.dp))
-                                }
                             }
                         }
                     }

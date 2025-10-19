@@ -39,6 +39,9 @@ interface AuthApiService {
     @GET("devices.php")
     suspend fun listDevices(): retrofit2.Response<List<DeviceDto>>
 
+    @GET("me.php")
+    suspend fun me(): retrofit2.Response<Map<String, Any>>
+
     @POST("logout_device.php")
     suspend fun logoutDevice(@Body body: Map<String, String>): Response<Map<String, Any>>
 
