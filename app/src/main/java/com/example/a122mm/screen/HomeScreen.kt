@@ -72,6 +72,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -124,7 +125,17 @@ import com.example.a122mm.pages.MoviePage
 import com.example.a122mm.pages.ProfilePage
 import com.example.a122mm.pages.SearchPage
 import com.example.a122mm.pages.SeriesPage
+import com.example.a122mm.utility.getDeviceId
 import kotlinx.coroutines.launch
+
+// Local state to hold devices
+data class UiDevice(
+    val deviceId: String,
+    val deviceName: String,
+    val deviceType: String,     // phone/tablet/tv
+    val lastActive: String,     // formatted
+    val isThisDevice: Boolean
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -638,7 +649,28 @@ fun SettingsDrawer(
 
         Divider(color = Color(0x22FFFFFF))
 
-        // Device Manager
+        // === Device Manager (expand/collapse) ===
+        var devicesExpanded by rememberSaveable { mutableStateOf(false) }
+        val context = LocalContext.current
+
+    // Build repo once here (same pattern you used above)
+        val repo = remember {
+            com.example.a122mm.auth.AuthRepository(
+                publicApi = com.example.a122mm.dataclass.AuthNetwork.publicAuthApi,
+                authedApi = com.example.a122mm.dataclass.AuthNetwork.authedAuthApi(context),
+                store = com.example.a122mm.auth.TokenStore(context)
+            )
+        }
+
+
+
+        var devices by remember { mutableStateOf<List<UiDevice>>(emptyList()) }
+        var loadingDevices by remember { mutableStateOf(false) }
+        var loadError by remember { mutableStateOf<String?>(null) }
+
+        val scope = rememberCoroutineScope()
+
+        // Expand/collapse header
         ListItem(
             headlineContent = { Text("Device Manager", color = Color.White) },
             supportingContent = { Text("Manage logged-in devices", color = Color(0xFFB3B3B3)) },
@@ -653,12 +685,173 @@ fun SettingsDrawer(
                 Icon(
                     imageVector = Icons.Outlined.ExpandMore,
                     contentDescription = null,
-                    tint = Color(0x66FFFFFF)
+                    tint = Color(0x66FFFFFF),
+                    modifier = Modifier.graphicsLayer {
+                        rotationZ = if (devicesExpanded) 180f else 0f
+                    }
                 )
             },
             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-            modifier = Modifier.clickable { onDeviceManager() }
+            modifier = Modifier.clickable {
+                devicesExpanded = !devicesExpanded
+                if (devicesExpanded && devices.isEmpty() && !loadingDevices) {
+                    loadingDevices = true
+                    loadError = null
+                    // fire-and-forget load
+                    scope.launch {
+                        val thisId = getDeviceId(context)
+                        repo.listDevices()
+                            .onSuccess { list ->
+                                devices = list.map {
+                                    UiDevice(
+                                        deviceId = it.device_id,
+                                        deviceName = it.device_name,
+                                        deviceType = it.device_type,
+                                        lastActive = it.last_active,
+                                        isThisDevice = (it.device_id == thisId)
+                                    )
+                                }
+                            }
+                            .onFailure { e -> loadError = e.message ?: "Failed to load devices" }
+                        loadingDevices = false
+                    }
+                }
+            }
         )
+
+        // Expanded content
+        AnimatedVisibility(visible = devicesExpanded) {
+            Column(Modifier.fillMaxWidth()) {
+                Spacer(Modifier.height(12.dp))
+
+                // This Device card
+                val thisDevice = devices.firstOrNull { it.isThisDevice }
+                if (thisDevice != null) {
+                    DeviceCard(
+                        title = "This Device",
+                        device = thisDevice,
+                        showIndicator = true,
+                        onLogout = {
+                            // log out THIS device => app-local logout
+                            // (don’t call server; just clear tokens & go to login)
+                            onLogout()
+                        }
+                    )
+                }
+
+                // Other Devices card
+                val others = devices.filter { !it.isThisDevice }
+                if (others.isNotEmpty()) {
+                    Spacer(Modifier.height(12.dp))
+                    Surface(
+                        color = Color(0xFF151515),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(Modifier.padding(14.dp)) {
+                            Text("Other Devices", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                            Spacer(Modifier.height(10.dp))
+
+                            // ▼▼ Add this action row ▼▼
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                                TextButton(
+                                    onClick = {
+                                        scope.launch {
+                                            loadingDevices = true
+                                            loadError = null
+                                            try {
+                                                val thisId = getDeviceId(context)
+                                                // call the repo method that hits logout_others.php
+                                                repo.logoutOtherDevices(thisId).onFailure { throw it }
+
+                                                // refresh list
+                                                repo.listDevices()
+                                                    .onSuccess { list ->
+                                                        devices = list.map {
+                                                            UiDevice(
+                                                                deviceId = it.device_id,
+                                                                deviceName = it.device_name,
+                                                                deviceType = it.device_type,
+                                                                lastActive = it.last_active,
+                                                                isThisDevice = (it.device_id == thisId)
+                                                            )
+                                                        }
+                                                    }
+                                                    .onFailure { throw it }
+                                            } catch (e: Exception) {
+                                                loadError = e.message ?: "Failed to refresh"
+                                            } finally {
+                                                loadingDevices = false
+                                            }
+                                        }
+                                    },
+                                    enabled = !loadingDevices
+                                ) {
+
+                                }
+                            }
+                            // ▲▲ End added section ▲▲
+
+                            Spacer(Modifier.height(6.dp))
+
+                            others.forEachIndexed { i, dev ->
+                                DeviceRow(
+                                    device = dev,
+                                    onLogout = {
+                                        scope.launch {
+                                            loadingDevices = true
+                                            loadError = null
+                                            try {
+                                                repo.logoutDevice(dev.deviceId).onFailure { throw it }
+
+                                                repo.listDevices()
+                                                    .onSuccess { list ->
+                                                        val thisId = getDeviceId(context)
+                                                        devices = list.map {
+                                                            UiDevice(
+                                                                deviceId = it.device_id,
+                                                                deviceName = it.device_name,
+                                                                deviceType = it.device_type,
+                                                                lastActive = it.last_active,
+                                                                isThisDevice = (it.device_id == thisId)
+                                                            )
+                                                        }
+                                                    }
+                                                    .onFailure { throw it }
+                                            } catch (e: Exception) {
+                                                loadError = e.message ?: "Failed to refresh"
+                                            } finally {
+                                                loadingDevices = false
+                                            }
+                                        }
+                                    }
+                                )
+                                if (i != others.lastIndex) {
+                                    Spacer(Modifier.height(10.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (loadingDevices) {
+                    Spacer(Modifier.height(12.dp))
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        CircularProgressIndicator(strokeWidth = 2.dp, color = Color.White)
+                    }
+                }
+                loadError?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text(it, color = Color(0xFFFF6B6B), fontSize = 12.sp)
+                }
+
+                Spacer(Modifier.height(8.dp))
+            }
+        }
+
 
         Spacer(Modifier.weight(1f))
         //Divider(color = Color(0x22FFFFFF))
@@ -1016,6 +1209,84 @@ fun NoRippleBottomBar(
             }
         }
     }
-
 }
+
+@Composable
+private fun DeviceCard(
+    title: String,
+    device: UiDevice,
+    showIndicator: Boolean,
+    onLogout: () -> Unit
+) {
+    Surface(
+        color = Color(0xFF151515),
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.padding(14.dp)) {
+            Text(title, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(8.dp))
+            DeviceRow(device = device, showIndicator = showIndicator, onLogout = onLogout)
+        }
+    }
+}
+
+@Composable
+private fun DeviceRow(
+    device: UiDevice,
+    showIndicator: Boolean = false,
+    onLogout: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // device icon by type
+        val icon = when (device.deviceType) {
+            "tv" -> Icons.Outlined.VideoLibrary
+            "tablet" -> Icons.Outlined.Home // replace with your tablet icon painter if you have one
+            else -> Icons.Outlined.Person
+        }
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color(0xFF222222)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+        }
+
+        Spacer(Modifier.width(12.dp))
+
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (showIndicator) {
+                    Box(
+                        Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF44D37E))
+                    )
+                    Spacer(Modifier.width(6.dp))
+                }
+                Text(device.deviceName, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            }
+            Text("Last used : ${device.lastActive}", color = Color(0xFFB3B3B3), fontSize = 12.sp)
+        }
+
+        Button(
+            onClick = onLogout,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFF2A2A2A),
+                contentColor = Color.White
+            ),
+            shape = RoundedCornerShape(8.dp),
+            modifier = Modifier.height(36.dp)
+        ) {
+            Text("Log Out", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
 

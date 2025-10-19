@@ -276,7 +276,7 @@ fun TvEpisodes(
                     text = episode.tvDescription.replace("`", "'"),
                     color = Color.LightGray,
                     fontSize = if (isTablet) 15.sp else 13.sp,
-                    maxLines = 3,
+                    maxLines = 4,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.fillMaxWidth()
                         .padding(horizontal = 8.dp)

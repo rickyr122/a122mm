@@ -1,5 +1,11 @@
 package com.example.a122mm.auth
 
+import android.content.Context
+import com.example.a122mm.helper.nowClientTimeString
+import com.example.a122mm.helper.tzOffsetMinutesNow
+import com.example.a122mm.utility.getDeviceId
+import com.example.a122mm.utility.getDeviceName
+import com.example.a122mm.utility.getDeviceType
 import org.json.JSONObject
 import java.io.IOException
 
@@ -8,9 +14,20 @@ class AuthRepository(
     private val authedApi: AuthApiService,
     private val store: TokenStore
 ) {
-    suspend fun login(email: String, password: String): Result<Unit> {
+    // ⬇️ changed: added `context` and build LoginReq with device fields
+    suspend fun login(context: Context, email: String, password: String): Result<Unit> {
         return try {
-            val resp = publicApi.login(LoginReq(email, password))
+            val req = AuthApiService.LoginReq(
+                email = email,
+                password = password,
+                device_id = getDeviceId(context),
+                device_name = getDeviceName(),
+                device_type = getDeviceType(context),
+                client_time = nowClientTimeString(),
+                tz_offset_minutes = tzOffsetMinutesNow()
+            )
+
+            val resp = publicApi.login(req)
             if (resp.isSuccessful && resp.body() != null) {
                 val b = resp.body()!!
                 store.save(b.access_token, b.refresh_token)
@@ -25,9 +42,17 @@ class AuthRepository(
         }
     }
 
-    suspend fun signup(email: String, name: String, password: String, clientTime: String): Result<Unit> {
+    suspend fun signup(email: String, name: String, password: String): Result<Unit> {
         return try {
-            val resp = publicApi.signup(SignUpReq(email, name, password))
+            val resp = publicApi.signup(
+                SignUpReq(
+                    email = email,
+                    name = name,
+                    password = password,
+                    client_time = nowClientTimeString(),
+                    tz_offset_minutes = tzOffsetMinutesNow()
+                )
+            )
             if (resp.isSuccessful) {
                 Result.success(Unit)
             } else {
@@ -39,6 +64,7 @@ class AuthRepository(
             Result.failure(Exception("Unexpected error: ${t.message ?: "unknown"}"))
         }
     }
+
 
     suspend fun profile(): Result<Profile> {
         return try {
@@ -83,6 +109,24 @@ class AuthRepository(
         } else {
             Result.failure(Exception("Failed to load profile picture"))
         }
+    }
+
+    suspend fun listDevices(): Result<List<AuthApiService.DeviceDto>> {
+        val r = authedApi.listDevices()
+        return if (r.isSuccessful && r.body() != null) Result.success(r.body()!!)
+        else Result.failure(Exception("HTTP ${r.code()}"))
+    }
+
+    suspend fun logoutDevice(deviceId: String): Result<Unit> {
+        val r = authedApi.logoutDevice(mapOf("device_id" to deviceId))
+        return if (r.isSuccessful) Result.success(Unit)
+        else Result.failure(Exception("HTTP ${r.code()}"))
+    }
+
+    suspend fun logoutOtherDevices(currentDeviceId: String): Result<Unit> {
+        val r = authedApi.logoutOthers(mapOf("device_id" to currentDeviceId))
+        return if (r.isSuccessful) Result.success(Unit)
+        else Result.failure(Exception("HTTP ${r.code()}"))
     }
 
 }

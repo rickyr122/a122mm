@@ -1,7 +1,14 @@
 package com.example.a122mm.auth
 
-data class LoginReq(val email: String, val password: String)
-data class SignUpReq(val email: String, val name: String, val password: String)
+//data class LoginReq(val email: String, val password: String)
+data class SignUpReq(
+    val email: String,
+    val name: String,
+    val password: String,
+    val client_time: String,
+    val tz_offset_minutes: Int
+)
+
 
 data class TokenRes(
     val status: String,

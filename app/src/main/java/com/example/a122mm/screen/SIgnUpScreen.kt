@@ -62,8 +62,6 @@ import com.example.a122mm.auth.SignUpViewModel
 import com.example.a122mm.auth.TokenStore
 import com.example.a122mm.dataclass.AuthNetwork
 import com.example.a122mm.helper.setScreenOrientation
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
 
 @Composable
 fun SignUpScreen(modifier: Modifier = Modifier, navController: NavHostController) {
@@ -268,16 +266,13 @@ fun SignUpScreen(modifier: Modifier = Modifier, navController: NavHostController
                         )
                     )
 
-
                     Spacer(modifier = Modifier.height(20.dp))
                     val isLoading = ui is com.example.a122mm.auth.SignUpUiState.Loading
 
                     Button(
                         onClick = {
-                                    val clientTime = LocalDateTime.now()
-                                        .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
-                                    vm.doSignUp(email.trim(), name.trim(), password, clientTime)
-                                  },
+                            vm.doSignUp(email.trim(), name.trim(), password)
+                        },
                         enabled = !isLoading &&
                                     email.isNotBlank() &&
                                     name.isNotBlank() &&
