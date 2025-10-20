@@ -864,7 +864,17 @@ fun SettingsDrawer(
                 .fillMaxWidth()
                 .height(50.dp)
                 .background(Color(0xFFE50914), shape = RoundedCornerShape(3.dp)) // Netflix red
-                .clickable { onLogout() },
+                .clickable {
+                    scope.launch {
+                    try {
+                        val thisId = getDeviceId(context)
+                        // tell server to revoke & delete this device row
+                        repo.logoutDevice(thisId).onFailure { throw it }
+                    } catch (_: Exception) { /* optional toast/log */ }
+                    // now do your existing local clear + nav
+                    onLogout()
+                    }
+                },
             contentAlignment = Alignment.Center
         ) {
             Text(
