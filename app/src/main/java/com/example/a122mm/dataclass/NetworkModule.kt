@@ -2,7 +2,6 @@ package com.example.a122mm.dataclass
 
 import android.content.Context
 import com.example.a122mm.auth.AuthApiService
-import com.example.a122mm.auth.SessionManager
 import com.example.a122mm.auth.TokenStore
 import com.example.a122mm.components.ApiService
 import com.example.a122mm.components.MovieApiService
@@ -58,49 +57,108 @@ object ApiClient {
 
 object AuthNetwork {
 
+    // Reuse your existing public Retrofit for refresh calls (no auth header)
     val publicAuthApi: AuthApiService by lazy {
         NetworkModule.retrofit.create(AuthApiService::class.java)
     }
 
+    // A mutex to prevent multiple simultaneous refresh calls
+    private val refreshMutex = kotlinx.coroutines.sync.Mutex()
+
+    // Marker header to avoid infinite retry loops
+    private const val HDR_REFRESH_ATTEMPTED = "X-Refresh-Attempted"
+
     fun authedAuthApi(context: Context): AuthApiService {
         val tokenStore = TokenStore(context)
 
-        val authInterceptor = okhttp3.Interceptor { chain ->
-            val access = kotlinx.coroutines.runBlocking { tokenStore.access() }
+        // Build a client with our auth+refresh interceptor (and optional logging)
+        val logging = okhttp3.logging.HttpLoggingInterceptor().apply {
+            level = okhttp3.logging.HttpLoggingInterceptor.Level.BODY // or NONE in release
+        }
 
-            val req = chain.request().newBuilder().apply {
+        val authAndRefreshInterceptor = okhttp3.Interceptor { chain ->
+            // 1) Attach current access token (if any)
+            val access = kotlinx.coroutines.runBlocking { tokenStore.access() }
+            val originalReq = chain.request()
+            val reqWithAuth = originalReq.newBuilder().apply {
                 if (!access.isNullOrBlank()) header("Authorization", "Bearer $access")
             }.build()
 
-            val res = chain.proceed(req)
+            // 2) Fire the request
+            var res = chain.proceed(reqWithAuth)
 
-            if (res.code == 401) {
-                // Decide reason before clearing the token
-                val reason = when {
-                    isTokenExpired(access) -> com.example.a122mm.auth.LogoutReason.TOKEN_EXPIRED
-                    else -> com.example.a122mm.auth.LogoutReason.REMOTE_LOGOUT
+            // 3) If unauthorized AND we haven’t retried this call yet, try refresh once
+            val alreadyTried = originalReq.header(HDR_REFRESH_ATTEMPTED) == "true"
+            if (res.code == 401 && !alreadyTried) {
+                // Close this response before retrying to avoid leaks
+                res.close()
+
+                // Only one refresh at a time across threads
+                val newAccess = kotlinx.coroutines.runBlocking {
+                    refreshMutex.lock()
+                    try {
+                        // Another request might have refreshed while we waited:
+                        val latestAccess = tokenStore.access()
+                        if (!latestAccess.isNullOrBlank() && latestAccess != access) {
+                            latestAccess
+                        } else {
+                            // Do the refresh using the stored refresh token
+                            val refreshTok = tokenStore.refresh()
+                            if (refreshTok.isNullOrBlank()) {
+                                null
+                            } else {
+                                try {
+                                    val r = publicAuthApi.refresh(mapOf("refresh_token" to refreshTok))
+                                    if (r.isSuccessful && r.body() != null) {
+                                        val b = r.body()!!
+                                        tokenStore.save(b.access_token, b.refresh_token)
+                                        b.access_token
+                                    } else {
+                                        null
+                                    }
+                                } catch (_: Throwable) {
+                                    null
+                                }
+                            }
+                        }
+                    } finally {
+                        refreshMutex.unlock()
+                    }
                 }
 
-                // Don’t close/consume the body here
-                kotlinx.coroutines.runBlocking { tokenStore.clear() }
-                com.example.a122mm.auth.SessionManager.broadcastLogout(reason)
+                if (!newAccess.isNullOrBlank()) {
+                    // 4) Retry the original request once with new access token
+                    val retried = originalReq.newBuilder()
+                        .header("Authorization", "Bearer $newAccess")
+                        .header(HDR_REFRESH_ATTEMPTED, "true")
+                        .build()
+                    res = chain.proceed(retried)
+                } else {
+                    // 5) Refresh failed -> clear local session & broadcast logout
+                    kotlinx.coroutines.runBlocking { tokenStore.clear() }
+                    com.example.a122mm.auth.SessionManager.broadcastLogout(
+                        com.example.a122mm.auth.LogoutReason.TOKEN_EXPIRED
+                    )
+                    // Return the original 401 so callers can also react if needed
+                    res = chain.proceed(
+                        originalReq.newBuilder()
+                            .header(HDR_REFRESH_ATTEMPTED, "true")
+                            .build()
+                    )
+                }
             }
 
             res
         }
 
-
-        val logging = okhttp3.logging.HttpLoggingInterceptor().apply {
-            // use the runtime debuggable check you added earlier, or set BODY while debugging
-            level = okhttp3.logging.HttpLoggingInterceptor.Level.BODY
-        }
-
         val client = okhttp3.OkHttpClient.Builder()
-            .addInterceptor(logging)         // optional, for debugging
-            .addInterceptor(authInterceptor) // attaches token and handles 401
+            .addInterceptor(logging)                 // optional
+            .addInterceptor(authAndRefreshInterceptor)
             .build()
 
-        val gson = com.google.gson.GsonBuilder().setLenient().create()
+        val gson = com.google.gson.GsonBuilder()
+            .setLenient()
+            .create()
 
         return retrofit2.Retrofit.Builder()
             .baseUrl("http://restfulapi.mooo.com/api/")
@@ -111,6 +169,7 @@ object AuthNetwork {
             .create(AuthApiService::class.java)
     }
 }
+
 
 
 //object AuthNetwork {

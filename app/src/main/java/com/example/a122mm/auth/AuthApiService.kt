@@ -23,6 +23,14 @@ interface AuthApiService {
     @POST("refresh.php")
     suspend fun refresh(@Body body: Map<String, String>): Response<TokenRes>
 
+    data class RefreshRes(
+        val status: String?,
+        val access_token: String,
+        val refresh_token: String,
+        val token_type: String?,
+        val expires_in: Int?
+    )
+
     @POST("device_upsert.php")
     suspend fun upsertDevice(
         @Body body: Map<String, String>
@@ -65,6 +73,4 @@ interface AuthApiService {
         val client_time: String,        // "yyyy-MM-dd HH:mm:ss" (LOCAL device time)
         val tz_offset_minutes: Int      // e.g., +420 for UTC+7 (Jakarta)
     )
-
-
 }
