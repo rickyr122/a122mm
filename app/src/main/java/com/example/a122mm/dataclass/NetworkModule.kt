@@ -2,9 +2,13 @@ package com.example.a122mm.dataclass
 
 import android.content.Context
 import com.example.a122mm.auth.AuthApiService
+import com.example.a122mm.auth.LogoutReason
+import com.example.a122mm.auth.SessionManager.broadcastLogout
 import com.example.a122mm.auth.TokenStore
 import com.example.a122mm.components.ApiService
 import com.example.a122mm.components.MovieApiService
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 
@@ -63,7 +67,7 @@ object AuthNetwork {
     }
 
     // A mutex to prevent multiple simultaneous refresh calls
-    private val refreshMutex = kotlinx.coroutines.sync.Mutex()
+    private val refreshMutex = Mutex()
 
     // Marker header to avoid infinite retry loops
     private const val HDR_REFRESH_ATTEMPTED = "X-Refresh-Attempted"
@@ -78,14 +82,23 @@ object AuthNetwork {
 
         val authAndRefreshInterceptor = okhttp3.Interceptor { chain ->
             // 1) Attach current access token (if any)
-            val access = kotlinx.coroutines.runBlocking { tokenStore.access() }
+            val access = runBlocking { tokenStore.access() }
             val originalReq = chain.request()
+
+            // Detect if this request should skip refresh logic
+            val noRefresh = originalReq.header("X-No-Refresh") == "1"
+
             val reqWithAuth = originalReq.newBuilder().apply {
                 if (!access.isNullOrBlank()) header("Authorization", "Bearer $access")
             }.build()
 
             // 2) Fire the request
             var res = chain.proceed(reqWithAuth)
+
+            // ✅ Skip refresh entirely for no-refresh requests
+            if (res.code == 401 && noRefresh) {
+                return@Interceptor res
+            }
 
             // 3) If unauthorized AND we haven’t retried this call yet, try refresh once
             val alreadyTried = originalReq.header(HDR_REFRESH_ATTEMPTED) == "true"
@@ -135,16 +148,17 @@ object AuthNetwork {
                     res = chain.proceed(retried)
                 } else {
                     // 5) Refresh failed -> clear local session & broadcast logout
-                    kotlinx.coroutines.runBlocking { tokenStore.clear() }
-                    com.example.a122mm.auth.SessionManager.broadcastLogout(
-                        com.example.a122mm.auth.LogoutReason.TOKEN_EXPIRED
+                    runBlocking { tokenStore.clear() }
+                    broadcastLogout(
+                        LogoutReason.TOKEN_EXPIRED
                     )
                     // Return the original 401 so callers can also react if needed
-                    res = chain.proceed(
-                        originalReq.newBuilder()
-                            .header(HDR_REFRESH_ATTEMPTED, "true")
-                            .build()
-                    )
+//                    res = chain.proceed(
+//                        originalReq.newBuilder()
+//                            .header(HDR_REFRESH_ATTEMPTED, "true")
+//                            .build()
+//                    )
+                    return@Interceptor res // just return 401 instead of retrying again
                 }
             }
 

@@ -42,7 +42,8 @@ fun SplashRoute(nav: NavHostController) {
             }
 
             // 2) Server check: is token still valid?
-            val ok = withContext(Dispatchers.IO) { repo.pingAuth() }
+//            val ok = withContext(Dispatchers.IO) { repo.pingAuth() }
+            val ok = withContext(Dispatchers.IO) { repo.pingAuthNoRefresh() }
 
             if (ok) {
                 nav.navigate("home") { popUpTo("splash") { inclusive = true } }

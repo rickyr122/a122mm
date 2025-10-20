@@ -19,7 +19,9 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowCompat
-import com.example.a122mm.auth.SessionManager
+import androidx.core.view.WindowCompat.setDecorFitsSystemWindows
+import com.example.a122mm.auth.LogoutReason
+import com.example.a122mm.auth.SessionManager.logoutFlow
 import com.example.a122mm.ui.theme.A122mmTheme
 
     class MainActivity : ComponentActivity() {
@@ -39,14 +41,14 @@ import com.example.a122mm.ui.theme.A122mmTheme
             window.navigationBarColor = android.graphics.Color.BLACK
 
             // You already use edge-to-edge; keep it
-            WindowCompat.setDecorFitsSystemWindows(window, false)
+            setDecorFitsSystemWindows(window, false)
 
             setContent {
                 val dark = isSystemInDarkTheme()
                 val navController = androidx.navigation.compose.rememberNavController()
 
                 Box(
-                    modifier = androidx.compose.ui.Modifier
+                    modifier = Modifier
                         .fillMaxSize()
                         .background(androidx.compose.ui.graphics.Color.Black)
                 ) {
@@ -54,11 +56,11 @@ import com.example.a122mm.ui.theme.A122mmTheme
                     val context = LocalContext.current
 
                     LaunchedEffect(Unit) {
-                        SessionManager.logoutFlow.collect { reason ->
+                        logoutFlow.collect { reason ->
                             val msg = when (reason) {
-                                com.example.a122mm.auth.LogoutReason.TOKEN_EXPIRED ->
+                                LogoutReason.TOKEN_EXPIRED ->
                                     "Your session expired. Please sign in again."
-                                com.example.a122mm.auth.LogoutReason.REMOTE_LOGOUT ->
+                                LogoutReason.REMOTE_LOGOUT ->
                                     "You were logged out from another device."
                                 else -> "You’ve been signed out."
                             }

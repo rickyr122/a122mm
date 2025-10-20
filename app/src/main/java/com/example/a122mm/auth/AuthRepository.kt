@@ -138,6 +138,11 @@ class AuthRepository(
         }
     }
 
+    suspend fun pingAuthNoRefresh(): Boolean = try {
+        authedApi.meNoRefresh().isSuccessful
+    } catch (_: Throwable) { false }
+
+
 
 }
 

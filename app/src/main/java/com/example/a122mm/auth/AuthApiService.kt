@@ -40,15 +40,20 @@ interface AuthApiService {
     suspend fun profile(): Response<ProfileRes>
 
     @GET("get_profilepic.php")
-    suspend fun getProfilePic(): retrofit2.Response<ProfilePicRes>
+    suspend fun getProfilePic(): Response<ProfilePicRes>
 
     data class ProfilePicRes(val pp_link: String)
 
     @GET("devices.php")
-    suspend fun listDevices(): retrofit2.Response<List<DeviceDto>>
+    suspend fun listDevices(): Response<List<DeviceDto>>
 
     @GET("me.php")
-    suspend fun me(): retrofit2.Response<Map<String, Any>>
+    suspend fun me(): Response<Map<String, Any>>
+
+    @GET("me.php")
+    @retrofit2.http.Headers("X-No-Refresh: 1")
+    suspend fun meNoRefresh(): retrofit2.Response<Map<String, Any>>
+
 
     @POST("logout_device.php")
     suspend fun logoutDevice(@Body body: Map<String, String>): Response<Map<String, Any>>
