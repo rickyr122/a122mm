@@ -39,6 +39,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
@@ -94,6 +95,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -760,10 +762,17 @@ fun SettingsDrawer(
                         device = thisDevice,
                         showIndicator = true,
                         onLogout = {
-                            // log out THIS device => app-local logout
-                            // (don’t call server; just clear tokens & go to login)
-                            onLogout()
+                            scope.launch {
+                                try {
+                                    val thisId = getDeviceId(context)
+                                    // tell server to revoke & delete this device row
+                                    repo.logoutDevice(thisId).onFailure { throw it }
+                                } catch (_: Exception) { /* optional toast/log */ }
+                                // now do your existing local clear + nav
+                                onLogout()
+                            }
                         }
+
                     )
                 }
 
@@ -1233,38 +1242,82 @@ private fun DeviceRow(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // device icon by type
-        val icon = when (device.deviceType) {
-            "tv" -> Icons.Outlined.VideoLibrary
-            "tablet" -> Icons.Outlined.Home // replace with your tablet icon painter if you have one
-            else -> Icons.Outlined.Person
-        }
+        // === Outer container for icon + badge ===
         Box(
-            modifier = Modifier
-                .size(36.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(Color(0xFF222222)),
+            modifier = Modifier.size(40.dp),
             contentAlignment = Alignment.Center
         ) {
-            Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+            // Icon box
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(8.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                when (device.deviceType) {
+                    "tv" -> {
+                        Icon(
+                            imageVector = Icons.Outlined.VideoLibrary,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    "tablet" -> {
+                        Image(
+                            painter = painterResource(id = R.drawable.tablet_ic),
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                            colorFilter = ColorFilter.tint(Color.White)
+                        )
+                    }
+                    "phone" -> {
+                        Image(
+                            painter = painterResource(id = R.drawable.phone_ic),
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                            colorFilter = ColorFilter.tint(Color.White)
+                        )
+                    }
+                    else -> {
+                        Icon(
+                            imageVector = Icons.Outlined.Person,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            }
+
+            // ✅ Lower badge that "touches" the top-right corner of icon
+            if (showIndicator) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .offset(x = (-8).dp, y = 8.dp)  // ↓ move slightly down & left
+                        .size(9.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF44D37E))
+                        .border(1.dp, Color.Black, CircleShape)
+                )
+            }
         }
 
         Spacer(Modifier.width(12.dp))
 
         Column(Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (showIndicator) {
-                    Box(
-                        Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF44D37E))
-                    )
-                    Spacer(Modifier.width(6.dp))
-                }
-                Text(device.deviceName, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-            }
-            Text("Last used : ${device.lastActive}", color = Color(0xFFB3B3B3), fontSize = 12.sp)
+            Text(
+                device.deviceName,
+                color = Color.White,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                "Last used : ${device.lastActive}",
+                color = Color(0xFFB3B3B3),
+                fontSize = 12.sp
+            )
         }
 
         Button(
@@ -1280,5 +1333,3 @@ private fun DeviceRow(
         }
     }
 }
-
-
