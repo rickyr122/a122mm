@@ -3,7 +3,6 @@ package com.example.a122mm.screen
 import android.app.Activity
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
-import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -129,9 +128,7 @@ import com.example.a122mm.pages.ProfilePage
 import com.example.a122mm.pages.SearchPage
 import com.example.a122mm.pages.SeriesPage
 import com.example.a122mm.utility.getDeviceId
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 // Local state to hold devices
 data class UiDevice(
@@ -292,31 +289,31 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
             store = com.example.a122mm.auth.TokenStore(context)
         )
     }
-    // ✅ Auto-check session validity when HomeScreen opens
-    LaunchedEffect(Unit) {
-        try {
-            val hasLocal = withContext(Dispatchers.IO) { repo.hasSession() }
-            if (!hasLocal) {
-                navController.navigate("login") {
-                    popUpTo("home") { inclusive = true }
-                }
-                return@LaunchedEffect
-            }
-
-            val ok = withContext(Dispatchers.IO) { repo.pingAuth() }
-            if (!ok) {
-                Toast.makeText(context, "Session expired. Please log in again.", Toast.LENGTH_LONG).show()
-                navController.navigate("login") {
-                    popUpTo("home") { inclusive = true }
-                }
-            }
-        } catch (t: Throwable) {
-            Toast.makeText(context, "Session check failed.", Toast.LENGTH_SHORT).show()
-            navController.navigate("login") {
-                popUpTo("home") { inclusive = true }
-            }
-        }
-    }
+//    // ✅ Auto-check session validity when HomeScreen opens
+//    LaunchedEffect(Unit) {
+//        try {
+//            val hasLocal = withContext(Dispatchers.IO) { repo.hasSession() }
+//            if (!hasLocal) {
+//                navController.navigate("login") {
+//                    popUpTo("home") { inclusive = true }
+//                }
+//                return@LaunchedEffect
+//            }
+//
+//            val ok = withContext(Dispatchers.IO) { repo.pingAuth() }
+//            if (!ok) {
+//                Toast.makeText(context, "Session expired. Please log in again.", Toast.LENGTH_LONG).show()
+//                navController.navigate("login") {
+//                    popUpTo("home") { inclusive = true }
+//                }
+//            }
+//        } catch (t: Throwable) {
+//            Toast.makeText(context, "Session check failed.", Toast.LENGTH_SHORT).show()
+//            navController.navigate("login") {
+//                popUpTo("home") { inclusive = true }
+//            }
+//        }
+//    }
 
     var profileUrl by remember { mutableStateOf<String?>(null) }
 

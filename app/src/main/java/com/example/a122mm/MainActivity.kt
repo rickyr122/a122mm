@@ -1,5 +1,6 @@
     package com.example.a122mm
 
+import android.graphics.drawable.ColorDrawable
 import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
@@ -20,6 +21,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowCompat.setDecorFitsSystemWindows
+import androidx.navigation.compose.rememberNavController
 import com.example.a122mm.auth.LogoutReason
 import com.example.a122mm.auth.SessionManager.logoutFlow
 import com.example.a122mm.ui.theme.A122mmTheme
@@ -32,7 +34,7 @@ import com.example.a122mm.ui.theme.A122mmTheme
             super.onCreate(savedInstanceState)
 
             // 1) Force black before Compose
-            window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.BLACK))
+            window.setBackgroundDrawable(ColorDrawable(android.graphics.Color.BLACK))
             window.statusBarColor = android.graphics.Color.BLACK
             window.navigationBarColor = android.graphics.Color.BLACK
 
@@ -45,12 +47,12 @@ import com.example.a122mm.ui.theme.A122mmTheme
 
             setContent {
                 val dark = isSystemInDarkTheme()
-                val navController = androidx.navigation.compose.rememberNavController()
+                val navController = rememberNavController()
 
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(androidx.compose.ui.graphics.Color.Black)
+                        .background(Color.Black)
                 ) {
 
                     val context = LocalContext.current

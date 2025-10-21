@@ -1,5 +1,6 @@
 package com.example.a122mm.pages
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -90,13 +91,16 @@ fun ProfilePage(
 
     LaunchedEffect(Unit) {
         val did = getDeviceId(context)
-        val dname = getDeviceName()
-        val dtype = getDeviceType(context)
+        if (!did.isNullOrBlank()) {
+            val dname = getDeviceName()
+            val dtype = getDeviceType(context)
+            val clientTime = LocalDateTime.now()
+                .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
 
-        val clientTime = LocalDateTime.now()
-            .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
-
-        repo.registerDevice(did, dname, dtype, clientTime)
+            repo.registerDevice(did, dname, dtype, clientTime)
+        } else {
+            Log.w("DeviceRegister", "Skipped registerDevice: deviceId is null or empty")
+        }
     }
 
 

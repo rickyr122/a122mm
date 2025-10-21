@@ -101,38 +101,28 @@ object AuthNetwork {
             }
 
             // 3) If unauthorized AND we haven’t retried this call yet, try refresh once
+            // 3) If unauthorized AND we haven’t retried this call yet, try refresh once
             val alreadyTried = originalReq.header(HDR_REFRESH_ATTEMPTED) == "true"
             if (res.code == 401 && !alreadyTried) {
-                // Close this response before retrying to avoid leaks
-                res.close()
 
-                // Only one refresh at a time across threads
+                // 🔁 Do NOT close 'res' yet. We might return it if refresh fails.
+
                 val newAccess = kotlinx.coroutines.runBlocking {
                     refreshMutex.lock()
                     try {
-                        // Another request might have refreshed while we waited:
                         val latestAccess = tokenStore.access()
                         if (!latestAccess.isNullOrBlank() && latestAccess != access) {
                             latestAccess
                         } else {
-                            // Do the refresh using the stored refresh token
                             val refreshTok = tokenStore.refresh()
-                            if (refreshTok.isNullOrBlank()) {
-                                null
-                            } else {
-                                try {
-                                    val r = publicAuthApi.refresh(mapOf("refresh_token" to refreshTok))
-                                    if (r.isSuccessful && r.body() != null) {
-                                        val b = r.body()!!
-                                        tokenStore.save(b.access_token, b.refresh_token)
-                                        b.access_token
-                                    } else {
-                                        null
-                                    }
-                                } catch (_: Throwable) {
-                                    null
-                                }
-                            }
+                            if (refreshTok.isNullOrBlank()) null else try {
+                                val r = publicAuthApi.refresh(mapOf("refresh_token" to refreshTok))
+                                if (r.isSuccessful && r.body() != null) {
+                                    val b = r.body()!!
+                                    tokenStore.save(b.access_token, b.refresh_token)
+                                    b.access_token
+                                } else null
+                            } catch (_: Throwable) { null }
                         }
                     } finally {
                         refreshMutex.unlock()
@@ -140,27 +130,22 @@ object AuthNetwork {
                 }
 
                 if (!newAccess.isNullOrBlank()) {
-                    // 4) Retry the original request once with new access token
+                    // ✅ Now we are going to retry -> it's safe to close the first response
+                    res.close()
+
                     val retried = originalReq.newBuilder()
                         .header("Authorization", "Bearer $newAccess")
                         .header(HDR_REFRESH_ATTEMPTED, "true")
                         .build()
                     res = chain.proceed(retried)
                 } else {
-                    // 5) Refresh failed -> clear local session & broadcast logout
+                    // ❌ Refresh failed -> clear + broadcast, then return the ORIGINAL (still-open) 401
                     runBlocking { tokenStore.clear() }
-                    broadcastLogout(
-                        LogoutReason.TOKEN_EXPIRED
-                    )
-                    // Return the original 401 so callers can also react if needed
-//                    res = chain.proceed(
-//                        originalReq.newBuilder()
-//                            .header(HDR_REFRESH_ATTEMPTED, "true")
-//                            .build()
-//                    )
-                    return@Interceptor res // just return 401 instead of retrying again
+                    broadcastLogout(LogoutReason.TOKEN_EXPIRED)
+                    return@Interceptor res   // safe: we did NOT close it
                 }
             }
+
 
             res
         }
