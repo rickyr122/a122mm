@@ -97,6 +97,7 @@ object AuthNetwork {
 
             // ✅ Skip refresh entirely for no-refresh requests
             if (res.code == 401 && noRefresh) {
+                broadcastLogout(LogoutReason.REMOTE_LOGOUT)
                 return@Interceptor res
             }
 
@@ -107,7 +108,7 @@ object AuthNetwork {
 
                 // 🔁 Do NOT close 'res' yet. We might return it if refresh fails.
 
-                val newAccess = kotlinx.coroutines.runBlocking {
+                val newAccess = runBlocking {
                     refreshMutex.lock()
                     try {
                         val latestAccess = tokenStore.access()
@@ -141,7 +142,8 @@ object AuthNetwork {
                 } else {
                     // ❌ Refresh failed -> clear + broadcast, then return the ORIGINAL (still-open) 401
                     runBlocking { tokenStore.clear() }
-                    broadcastLogout(LogoutReason.TOKEN_EXPIRED)
+                    //broadcastLogout(LogoutReason.TOKEN_EXPIRED)
+                    broadcastLogout(LogoutReason.REMOTE_LOGOUT)
                     return@Interceptor res   // safe: we did NOT close it
                 }
             }

@@ -118,7 +118,10 @@ import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.a122mm.R
+import com.example.a122mm.auth.LogoutReason
 import com.example.a122mm.auth.ProfileViewModel2
+import com.example.a122mm.auth.SessionManager.broadcastLogout
+import com.example.a122mm.auth.TokenStore
 import com.example.a122mm.dataclass.BottomNavItem
 import com.example.a122mm.helper.setScreenOrientation
 import com.example.a122mm.pages.HighlightsPage
@@ -128,6 +131,7 @@ import com.example.a122mm.pages.ProfilePage
 import com.example.a122mm.pages.SearchPage
 import com.example.a122mm.pages.SeriesPage
 import com.example.a122mm.utility.getDeviceId
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 // Local state to hold devices
@@ -956,11 +960,23 @@ fun ConfirmLogoutSheet(
         )
         Spacer(Modifier.height(18.dp))
 
+        val context = LocalContext.current
+        val tokenStore = remember { TokenStore(context) }
+        val scope = rememberCoroutineScope()
+
         Button(
             onClick = {
                 if (!isLoading) {
                     isLoading = true
-                    onConfirm()   // triggers your logout logic
+                    scope.launch {
+                        onConfirm()  // your API logout if any
+
+                        // Wait a short beat to let API finish before broadcast
+                        delay(150)
+
+                        tokenStore.clear()
+                        broadcastLogout(LogoutReason.MANUAL_LOGOUT)
+                    }
                 }
             },
             modifier = Modifier
