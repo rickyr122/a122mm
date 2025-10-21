@@ -8,6 +8,8 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -25,6 +27,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -41,10 +44,12 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -73,7 +78,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -114,6 +118,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
@@ -587,32 +592,76 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
             }
         }
         val vm: ProfileViewModel2 = viewModel()
-        val isTall = isTablet && isLandscape
+        //val isTall = isTablet && isLandscape
         if (showLogoutSheet) {
-            ModalBottomSheet(
-                onDismissRequest = { showLogoutSheet = false },
-                containerColor = Color(0xFF0F0F0F),
-                scrimColor = Color.Black.copy(alpha = 0.6f),
-                dragHandle = null,
-                shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
-                sheetMaxWidth = Dp.Unspecified,
-                contentWindowInsets = { WindowInsets.navigationBars }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .zIndex(10f)
             ) {
-                ConfirmLogoutSheet(
-                    onClose = { showLogoutSheet = false },
-                    onConfirm = {
-                        showLogoutSheet = false
-                        // ✅ your actual logout flow
-                        vm.logout(context)
-                        navController.navigate("login") {
-                            popUpTo("home") { inclusive = true }
-                        }
-                    },
-                    isTall = isTall
+                // SCRIM
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .background(Color.Black.copy(alpha = 0.6f))
+                        .clickable { showLogoutSheet = false }
                 )
+
+                // 🔥 ANIMATED Bottom Sheet
+                AnimatedVisibility(
+                    visible = true,
+                    enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                    exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+                    modifier = Modifier.align(Alignment.BottomCenter)
+                ) {
+                    BoxWithConstraints(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFF0F0F0F), RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
+                    ) {
+                        val screenHeight = maxHeight
+
+                        // 1) Compute your target height (you liked 70% vs 45%)
+                        val targetHeight = when {
+                            isTablet && isLandscape -> screenHeight * 0.70f
+                            isTablet && !isLandscape -> screenHeight * 0.45f
+                            else -> screenHeight * 0.55f
+                        }
+
+                        // 2) Animate between heights
+                        val animatedHeight by animateDpAsState(
+                            targetValue = targetHeight,
+                            // pick one:
+                            animationSpec = tween(durationMillis = 300)                      // smooth tween
+                            // animationSpec = spring(dampingRatio = 0.8f, stiffness = 350f) // “springy” feel
+                        )
+
+                        // 3) Apply animated height
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(animatedHeight)               // ← animated
+                                .align(Alignment.BottomCenter)
+                                .imePadding()
+                                .windowInsetsPadding(WindowInsets.safeDrawing)
+                                .animateContentSize()                 // optional: animates internal reflows
+                        ) {
+                            ConfirmLogoutContent(
+                                onClose = { showLogoutSheet = false },
+                                onConfirm = {
+                                    showLogoutSheet = false
+                                    vm.logout(context)
+                                    navController.navigate("login") {
+                                        popUpTo("home") { inclusive = true }
+                                    }
+                                }
+                            )
+                        }
+                    }
+
+                }
             }
         }
-
     }
 }
 
@@ -923,8 +972,8 @@ fun ConfirmLogoutSheet(
         modifier = Modifier
             .fillMaxWidth()
             .then(if (isTall) Modifier.fillMaxHeight(0.60f) else Modifier)
-            .imePadding()                 // keyboard safe
-            .navigationBarsPadding()      // nav-bar safe (adds bottom padding)
+            .navigationBarsPadding()   // ⬅ bottom safe area only
+            .imePadding()              // ⬅ keyboard safe
             .padding(horizontal = 20.dp, vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -1023,7 +1072,7 @@ fun ConfirmLogoutSheet(
         }
 
         Spacer(Modifier.height(8.dp))
-        Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
+
 
         // Cancel
         TextButton(
@@ -1034,10 +1083,101 @@ fun ConfirmLogoutSheet(
         }
 
         Spacer(Modifier.height(12.dp))
-
+        Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
     }
 }
 
+@Composable
+fun ConfirmLogoutContent(
+    onClose: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // Close (X)
+        Box(Modifier.fillMaxWidth()) {
+            Icon(
+                imageVector = Icons.Default.Close,
+                contentDescription = "Close",
+                tint = Color(0xAAFFFFFF),
+                modifier = Modifier
+                    .size(24.dp)
+                    .align(Alignment.TopEnd)
+                    .clickable { onClose() }
+            )
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        // Illustration / icon
+        Box(
+            modifier = Modifier
+                .size(96.dp)
+                .background(Color(0xFF1A1A1A), RoundedCornerShape(16.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.Logout,
+                contentDescription = null,
+                tint = Color(0xFFE56B6F),
+                modifier = Modifier.size(36.dp)
+            )
+        }
+
+        Spacer(Modifier.height(18.dp))
+        Text(
+            text = "Are you sure you want to sign out?",
+            color = Color.White,
+            fontSize = 18.sp,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = "You will be asked to sign in again to watch your favourites.",
+            color = Color(0xFFB3B3B3),
+            fontSize = 14.sp,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(Modifier.height(18.dp))
+
+        // 🔴 Red Sign Out Button
+        Button(
+            onClick = onConfirm,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(50.dp),
+            shape = RoundedCornerShape(3.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE50914))
+        ) {
+            Text("Sign Out", color = Color.White, fontSize = 16.sp)
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        // ⚪ Cancel Button
+        TextButton(
+            onClick = onClose,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp)
+        ) {
+            Text("Cancel", color = Color(0xFFB3B3B3), fontSize = 16.sp)
+        }
+//        val configuration = LocalConfiguration.current
+//        val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+//        val isTablet = configuration.screenWidthDp >= 600
+//
+//        /* 👇 Force extra safe zone to clear any taskbar / gesture bar */
+//        Spacer(Modifier.height(if (isTablet && isLandscape) 100.dp else 0.dp)) // <- fixed cushion
+//        Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
+    }
+}
 
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
