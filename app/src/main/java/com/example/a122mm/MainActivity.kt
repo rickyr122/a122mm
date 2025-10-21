@@ -78,7 +78,8 @@ import kotlinx.coroutines.delay
                                 LogoutReason.TOKEN_EXPIRED ->
                                     "Your session expired. Please sign in again."
                                 LogoutReason.REMOTE_LOGOUT ->
-                                    "You were logged out from another device."
+                                    "You were looged out."
+                                    //"You were logged out from another device."
                                 LogoutReason.MANUAL_LOGOUT ->
                                     "You’ve signed out successfully."
                                 else ->

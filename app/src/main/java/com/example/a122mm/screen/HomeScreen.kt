@@ -36,6 +36,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
@@ -43,6 +44,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -118,9 +120,7 @@ import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.a122mm.R
-import com.example.a122mm.auth.LogoutReason
 import com.example.a122mm.auth.ProfileViewModel2
-import com.example.a122mm.auth.SessionManager.broadcastLogout
 import com.example.a122mm.auth.TokenStore
 import com.example.a122mm.dataclass.BottomNavItem
 import com.example.a122mm.helper.setScreenOrientation
@@ -131,7 +131,6 @@ import com.example.a122mm.pages.ProfilePage
 import com.example.a122mm.pages.SearchPage
 import com.example.a122mm.pages.SeriesPage
 import com.example.a122mm.utility.getDeviceId
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 // Local state to hold devices
@@ -588,13 +587,16 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
             }
         }
         val vm: ProfileViewModel2 = viewModel()
+        val isTall = isTablet && isLandscape
         if (showLogoutSheet) {
             ModalBottomSheet(
                 onDismissRequest = { showLogoutSheet = false },
                 containerColor = Color(0xFF0F0F0F),
                 scrimColor = Color.Black.copy(alpha = 0.6f),
                 dragHandle = null,
-                shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
+                shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+                sheetMaxWidth = Dp.Unspecified,
+                contentWindowInsets = { WindowInsets.navigationBars }
             ) {
                 ConfirmLogoutSheet(
                     onClose = { showLogoutSheet = false },
@@ -605,7 +607,8 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
                         navController.navigate("login") {
                             popUpTo("home") { inclusive = true }
                         }
-                    }
+                    },
+                    isTall = isTall
                 )
             }
         }
@@ -764,12 +767,12 @@ fun SettingsDrawer(
                         showIndicator = true,
                         onLogout = {
                             scope.launch {
-                                try {
-                                    val thisId = getDeviceId(context)
-                                    // tell server to revoke & delete this device row
-                                    repo.logoutDevice(thisId).onFailure { throw it }
-                                } catch (_: Exception) { /* optional toast/log */ }
-                                // now do your existing local clear + nav
+//                                try {
+//                                    val thisId = getDeviceId(context)
+//                                    // tell server to revoke & delete this device row
+//                                    repo.logoutDevice(thisId).onFailure { throw it }
+//                                } catch (_: Exception) { /* optional toast/log */ }
+//                                // now do your existing local clear + nav
                                 onLogout()
                             }
                         }
@@ -859,7 +862,7 @@ fun SettingsDrawer(
         //Divider(color = Color(0x22FFFFFF))
         //Spacer(Modifier.height(12.dp))
 
-        // 🔥 LOG OUT button (red block)
+        // 🔥 SIGN OUT button (red block)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -867,11 +870,11 @@ fun SettingsDrawer(
                 .background(Color(0xFFE50914), shape = RoundedCornerShape(3.dp)) // Netflix red
                 .clickable {
                     scope.launch {
-                    try {
-                        val thisId = getDeviceId(context)
-                        // tell server to revoke & delete this device row
-                        repo.logoutDevice(thisId).onFailure { throw it }
-                    } catch (_: Exception) { /* optional toast/log */ }
+//                    try {
+//                        val thisId = getDeviceId(context)
+//                        // tell server to revoke & delete this device row
+//                        repo.logoutDevice(thisId).onFailure { throw it }
+//                    } catch (_: Exception) { /* optional toast/log */ }
                     // now do your existing local clear + nav
                     onLogout()
                     }
@@ -902,14 +905,26 @@ fun SettingsDrawer(
 @Composable
 fun ConfirmLogoutSheet(
     onClose: () -> Unit,
-    onConfirm: () -> Unit
+    onConfirm: () -> Unit,
+    isTall: Boolean = false
 ) {
     var isLoading by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+
+    val repo = remember {
+        com.example.a122mm.auth.AuthRepository(
+            publicApi = com.example.a122mm.dataclass.AuthNetwork.publicAuthApi,
+            authedApi = com.example.a122mm.dataclass.AuthNetwork.authedAuthApi(context),
+            store = TokenStore(context)
+        )
+    }
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .navigationBarsPadding()
+            .then(if (isTall) Modifier.fillMaxHeight(0.60f) else Modifier)
+            .imePadding()                 // keyboard safe
+            .navigationBarsPadding()      // nav-bar safe (adds bottom padding)
             .padding(horizontal = 20.dp, vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -960,7 +975,7 @@ fun ConfirmLogoutSheet(
         )
         Spacer(Modifier.height(18.dp))
 
-        val context = LocalContext.current
+        //val context = LocalContext.current
         val tokenStore = remember { TokenStore(context) }
         val scope = rememberCoroutineScope()
 
@@ -968,14 +983,24 @@ fun ConfirmLogoutSheet(
             onClick = {
                 if (!isLoading) {
                     isLoading = true
+                    //onConfirm()
+//                    scope.launch {
+//                        onConfirm()  // your API logout if any
+//
+//                        // Wait a short beat to let API finish before broadcast
+//                        delay(150)
+//
+//                        tokenStore.clear()
+//                        broadcastLogout(LogoutReason.MANUAL_LOGOUT)
+//                    }
                     scope.launch {
-                        onConfirm()  // your API logout if any
-
-                        // Wait a short beat to let API finish before broadcast
-                        delay(150)
-
-                        tokenStore.clear()
-                        broadcastLogout(LogoutReason.MANUAL_LOGOUT)
+                                try {
+                                    val thisId = getDeviceId(context)
+                                    // tell server to revoke & delete this device row
+                                    repo.logoutDevice(thisId).onFailure { throw it }
+                                } catch (_: Exception) { /* optional toast/log */ }
+                                // now do your existing local clear + nav
+                        onConfirm()
                     }
                 }
             },
@@ -998,6 +1023,7 @@ fun ConfirmLogoutSheet(
         }
 
         Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
 
         // Cancel
         TextButton(
@@ -1008,6 +1034,7 @@ fun ConfirmLogoutSheet(
         }
 
         Spacer(Modifier.height(12.dp))
+
     }
 }
 
