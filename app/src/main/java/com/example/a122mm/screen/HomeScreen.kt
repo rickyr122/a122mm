@@ -642,6 +642,7 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
                                 .fillMaxWidth()
                                 .height(animatedHeight)               // ← animated
                                 .align(Alignment.BottomCenter)
+                                .offset(y = (-24).dp)
                                 .imePadding()
                                 .windowInsetsPadding(WindowInsets.safeDrawing)
                                 .animateContentSize()                 // optional: animates internal reflows
@@ -1117,7 +1118,7 @@ fun ConfirmLogoutContent(
         Box(
             modifier = Modifier
                 .size(96.dp)
-                .background(Color(0xFF1A1A1A), RoundedCornerShape(16.dp)),
+                .background(Color.Transparent, RoundedCornerShape(16.dp)), // transparent!
             contentAlignment = Alignment.Center
         ) {
             Icon(
