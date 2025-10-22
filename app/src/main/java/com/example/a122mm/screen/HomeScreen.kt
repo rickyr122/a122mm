@@ -48,7 +48,6 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -126,7 +125,6 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.a122mm.R
 import com.example.a122mm.auth.ProfileViewModel2
-import com.example.a122mm.auth.TokenStore
 import com.example.a122mm.dataclass.BottomNavItem
 import com.example.a122mm.helper.setScreenOrientation
 import com.example.a122mm.pages.HighlightsPage
@@ -593,6 +591,11 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
         val vm: ProfileViewModel2 = viewModel()
         //val isTall = isTablet && isLandscape
         if (showLogoutSheet) {
+
+            BackHandler(enabled = true) {
+                showLogoutSheet = false
+            }
+
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -948,142 +951,6 @@ fun SettingsDrawer(
         )
 
         Spacer(Modifier.height(8.dp))
-    }
-}
-
-@Composable
-fun ConfirmLogoutSheet(
-    onClose: () -> Unit,
-    onConfirm: () -> Unit,
-    isTall: Boolean = false
-) {
-    var isLoading by remember { mutableStateOf(false) }
-    val context = LocalContext.current
-
-    val repo = remember {
-        com.example.a122mm.auth.AuthRepository(
-            publicApi = com.example.a122mm.dataclass.AuthNetwork.publicAuthApi,
-            authedApi = com.example.a122mm.dataclass.AuthNetwork.authedAuthApi(context),
-            store = TokenStore(context)
-        )
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(if (isTall) Modifier.fillMaxHeight(0.60f) else Modifier)
-            .navigationBarsPadding()   // ⬅ bottom safe area only
-            .imePadding()              // ⬅ keyboard safe
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        // Close (X) in top-right
-        Box(Modifier.fillMaxWidth()) {
-            Icon(
-                imageVector = Icons.Default.Close,
-                contentDescription = "Close",
-                tint = Color(0xAAFFFFFF),
-                modifier = Modifier
-                    .size(24.dp)
-                    .align(Alignment.TopEnd)
-                    .clickable { onClose() }
-            )
-        }
-        Spacer(Modifier.height(8.dp))
-
-        // Illustration / Icon
-        Box(
-            modifier = Modifier
-                .size(96.dp)
-                .background(Color(0xFF1A1A1A), RoundedCornerShape(16.dp)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Default.Logout, // swap with custom painter if you like
-                contentDescription = null,
-                tint = Color(0xFFE56B6F),
-                modifier = Modifier.size(36.dp)
-            )
-        }
-
-        Spacer(Modifier.height(18.dp))
-        Text(
-            text = "Are you sure you want to sign out?",
-            color = Color.White,
-            fontSize = 18.sp,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(Modifier.height(6.dp))
-        Text(
-            text = "You will be asked to sign in again to watch your favourites.",
-            color = Color(0xFFB3B3B3),
-            fontSize = 14.sp,
-            textAlign = TextAlign.Center,                 // ✅ center-align text
-            modifier = Modifier.fillMaxWidth()            // ✅ let it take full width
-        )
-        Spacer(Modifier.height(18.dp))
-
-        //val context = LocalContext.current
-        val tokenStore = remember { TokenStore(context) }
-        val scope = rememberCoroutineScope()
-
-        Button(
-            onClick = {
-                if (!isLoading) {
-                    isLoading = true
-                    //onConfirm()
-//                    scope.launch {
-//                        onConfirm()  // your API logout if any
-//
-//                        // Wait a short beat to let API finish before broadcast
-//                        delay(150)
-//
-//                        tokenStore.clear()
-//                        broadcastLogout(LogoutReason.MANUAL_LOGOUT)
-//                    }
-                    scope.launch {
-                                try {
-                                    val thisId = getDeviceId(context)
-                                    // tell server to revoke & delete this device row
-                                    repo.logoutDevice(thisId).onFailure { throw it }
-                                } catch (_: Exception) { /* optional toast/log */ }
-                                // now do your existing local clear + nav
-                        onConfirm()
-                    }
-                }
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(50.dp),
-            shape = RoundedCornerShape(3.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE50914)), // 🔴 red
-            enabled = !isLoading
-        ) {
-            if (isLoading) {
-                CircularProgressIndicator(
-                    color = Color.White,
-                    strokeWidth = 2.dp,
-                    modifier = Modifier.size(22.dp)
-                )
-            } else {
-                Text("Sign Out", color = Color.White, fontSize = 16.sp)
-            }
-        }
-
-        Spacer(Modifier.height(8.dp))
-
-
-        // Cancel
-        TextButton(
-            onClick = onClose,
-            modifier = Modifier.fillMaxWidth().height(48.dp)
-        ) {
-            Text("Cancel", color = Color(0xFFB3B3B3), fontSize = 16.sp)
-        }
-
-        Spacer(Modifier.height(12.dp))
-        Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
     }
 }
 
