@@ -326,11 +326,10 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
     var profileUrl by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
-        repo.loadProfilePic()
-            .onSuccess { profileUrl = it }
-            .onFailure { profileUrl = null } // fall back to local avatar
+        repo.loadProfilePic() // Result<ProfilePicRes>
+            .onSuccess { res -> profileUrl = res.pp_link }   // <-- use field
+            .onFailure { profileUrl = null }
     }
-
 
     // ====== LAYOUT ======
     Box(

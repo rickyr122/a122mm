@@ -45,6 +45,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -156,6 +157,8 @@ fun ViewRecentWatch(
     val scope = rememberCoroutineScope()
     var selectedItem by remember { mutableStateOf<RecentWatchResponse?>(null) }
 
+    val configuration = LocalConfiguration.current
+    val isTablet = configuration.screenWidthDp >= 600
 
     if (items.isEmpty()) {
         Box(
@@ -188,7 +191,7 @@ fun ViewRecentWatch(
         items(items) { item ->
             Column(
                 modifier = Modifier
-                    .width(220.dp)  // card width
+                    .width(if (isTablet) 260.dp else 220.dp)  // card width
             ) {
                 // 🔹 Image part
                 Box(

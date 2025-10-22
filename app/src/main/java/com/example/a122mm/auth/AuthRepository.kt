@@ -102,10 +102,10 @@ class AuthRepository(
     suspend fun hasSession(): Boolean = store.access()?.isNotBlank() == true
     suspend fun logout() = store.clear()
 
-    suspend fun loadProfilePic(): Result<String> {
+    suspend fun loadProfilePic(): Result<AuthApiService.ProfilePicRes> {
         val resp = authedApi.getProfilePic()
         return if (resp.isSuccessful && resp.body() != null) {
-            Result.success(resp.body()!!.pp_link)
+            Result.success(resp.body()!!)   // ✅ return full object
         } else {
             Result.failure(Exception("Failed to load profile picture"))
         }

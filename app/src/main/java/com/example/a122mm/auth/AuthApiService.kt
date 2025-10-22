@@ -42,7 +42,10 @@ interface AuthApiService {
     @GET("get_profilepic.php")
     suspend fun getProfilePic(): Response<ProfilePicRes>
 
-    data class ProfilePicRes(val pp_link: String)
+    data class ProfilePicRes(
+        val pp_link: String,
+        val username: String
+    )
 
     @GET("devices.php")
     suspend fun listDevices(): Response<List<DeviceDto>>
