@@ -288,6 +288,7 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
 
     LaunchedEffect(openSignal?.value) {
         if (openSignal?.value == true) {
+            selectedItem = 3
             showSettings = true  // open SettingsDrawer
             navController.currentBackStackEntry
                 ?.savedStateHandle
@@ -598,7 +599,10 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(horizontal = 16.dp, vertical = 8.dp),
-                    onBack = { showSettings = false },
+                    onBack = {
+                        showSettings = false
+                        selectedItem = 3
+                    },
                     onAccount = {
                         showSettings = false
                         navController.navigate("settings")
