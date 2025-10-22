@@ -86,6 +86,7 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -278,6 +279,22 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
 
     var showSettings by rememberSaveable { mutableStateOf(false) }
     BackHandler(enabled = showSettings) { showSettings = false }
+
+    val openSignalFlow = navController.currentBackStackEntry
+        ?.savedStateHandle
+        ?.getStateFlow("open_settings_drawer", false)
+
+    val openSignal = openSignalFlow?.collectAsState()
+
+    LaunchedEffect(openSignal?.value) {
+        if (openSignal?.value == true) {
+            showSettings = true  // open SettingsDrawer
+            navController.currentBackStackEntry
+                ?.savedStateHandle
+                ?.set("open_settings_drawer", false) // reset the flag
+        }
+    }
+
 
 
     LaunchedEffect(selectedItem, scrollState.isScrollInProgress) {
@@ -582,7 +599,10 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
                         .fillMaxSize()
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                     onBack = { showSettings = false },
-                    onAccount = { /* TODO: navigate */ },
+                    onAccount = {
+                        showSettings = false
+                        navController.navigate("settings")
+                    },
                     onDeviceManager = { /* TODO: navigate */ },
                     onLogout = { showLogoutSheet = true }
                 )

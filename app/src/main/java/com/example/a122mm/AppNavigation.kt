@@ -13,6 +13,7 @@ import com.example.a122mm.auth.RequireAuth
 import com.example.a122mm.components.ViewMovieDetail
 import com.example.a122mm.dataclass.HomeViewModel
 import com.example.a122mm.helper.fixEncoding
+import com.example.a122mm.screen.AccountSettingsScreen
 import com.example.a122mm.screen.AuthScreen
 import com.example.a122mm.screen.HomeScreen
 import com.example.a122mm.screen.LoginScreen
@@ -48,6 +49,11 @@ fun AppNavigation(
         composable("home") {
             HomeScreen(modifier, navController)
         }
+
+        composable("settings") {
+            AccountSettingsScreen(navController)
+        }
+
 
         composable("movie/{movieId}") { backStackEntry ->
             val movieId = backStackEntry.arguments?.getString("movieId") ?: ""
