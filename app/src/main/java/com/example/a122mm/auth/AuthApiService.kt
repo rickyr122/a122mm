@@ -57,13 +57,11 @@ interface AuthApiService {
     @retrofit2.http.Headers("X-No-Refresh: 1")
     suspend fun meNoRefresh(): retrofit2.Response<Map<String, Any>>
 
-
     @POST("logout_device.php")
     suspend fun logoutDevice(@Body body: Map<String, String>): Response<Map<String, Any>>
 
     @POST("logout_others.php")
     suspend fun logoutOthers(@Body body: Map<String, String>): Response<Map<String, Any>>
-
 
     data class DeviceDto(
         val device_id: String,
@@ -80,5 +78,20 @@ interface AuthApiService {
         val device_type: String,   // "phone" | "tablet" | "tv"
         val client_time: String,        // "yyyy-MM-dd HH:mm:ss" (LOCAL device time)
         val tz_offset_minutes: Int      // e.g., +420 for UTC+7 (Jakarta)
+    )
+
+    @POST("change_password.php")
+    suspend fun changePassword(@Body body: ChangePasswordReq): Response<BasicRes>
+
+    // request/response models
+    data class ChangePasswordReq(
+        val current_password: String,
+        val new_password: String,
+        val sign_out_all: Boolean
+    )
+
+    data class BasicRes(
+        val status: String?,        // "ok"
+        val logout: Boolean? = null // server can ask client to log out
     )
 }

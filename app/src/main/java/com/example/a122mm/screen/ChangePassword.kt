@@ -10,6 +10,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -30,6 +31,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -62,8 +64,12 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import com.example.a122mm.auth.AuthRepository
+import com.example.a122mm.auth.TokenStore
+import com.example.a122mm.dataclass.AuthNetwork
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -87,6 +93,14 @@ fun ChangePasswordScreen(navController: NavController) {
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     val isTablet = configuration.screenWidthDp >= 600
+
+    val repo = remember {
+        AuthRepository(
+            publicApi = AuthNetwork.publicAuthApi,
+            authedApi = AuthNetwork.authedAuthApi(ctx),
+            store = TokenStore(ctx)
+        )
+    }
 
     LaunchedEffect(Unit) { visible = true }
 
@@ -289,9 +303,15 @@ fun ChangePasswordScreen(navController: NavController) {
                             }
                         }
 
-                        Spacer(Modifier.height(32.dp))
+                        Spacer(Modifier.height(24.dp))
 
-                        Column {
+                        // Keep this separate column to prevent collapse
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp), // fixed height avoids jump
+                            contentAlignment = Alignment.Center
+                        ) {
                             Button(
                                 onClick = {
                                     if (saving) return@Button
@@ -303,40 +323,59 @@ fun ChangePasswordScreen(navController: NavController) {
                                         else -> {
                                             saving = true
                                             scope.launch {
-                                                Toast.makeText(ctx, "Saved (stub)", Toast.LENGTH_SHORT).show()
+                                                val res = repo.changePassword(current, newPass, signOutAll)
+                                                res.onSuccess { mustLogout ->
+                                                    Toast.makeText(ctx, "Password updated", Toast.LENGTH_SHORT).show()
+                                                    if (mustLogout) {
+                                                        repo.logout()
+                                                        navController.navigate("login") { popUpTo(0) { inclusive = true } }
+                                                    } else navController.popBackStack()
+                                                }.onFailure { e ->
+                                                    Toast.makeText(ctx, e.message ?: "Update failed", Toast.LENGTH_SHORT).show()
+                                                }
                                                 saving = false
-                                                visible = false
-                                                delay(180)
-                                                navController.popBackStack()
                                             }
                                         }
                                     }
                                 },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(48.dp),
-                                shape = RoundedCornerShape(3.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color.Black),
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color.Black,
+                                    contentColor = Color.White,
+                                    disabledContainerColor = Color.Black,            // keep it black when disabled
+                                    disabledContentColor = Color.White.copy(alpha = 0.7f) // spinner/text still visible
+                                ),
                                 enabled = !saving
                             ) {
-                                Text(if (saving) "Saving..." else "Save", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                            }
-
-                            Spacer(Modifier.height(10.dp))
-
-                            TextButton(
-                                onClick = {
-                                    scope.launch {
-                                        visible = false
-                                        delay(180)
-                                        navController.popBackStack()
-                                    }
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text("Cancel", color = Color.Black, fontSize = 16.sp)
+                                if (saving) {
+                                    CircularProgressIndicator(
+                                        color = Color.White,
+                                        strokeWidth = 2.dp,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                } else {
+                                    Text("Save", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                                }
                             }
                         }
+
+                        Spacer(Modifier.height(0.dp))
+                        TextButton(
+                            onClick = {
+                                scope.launch {
+                                    visible = false
+                                    delay(180)
+                                    navController.popBackStack()
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Cancel", color = Color.Black, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                        }
+
+
+
                     }
                 }
             }
