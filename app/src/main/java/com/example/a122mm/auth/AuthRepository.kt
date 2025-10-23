@@ -159,11 +159,11 @@ class AuthRepository(
                 // return whether server asked us to logout (e.g., after revoking all tokens)
                 Result.success(resp.body()!!.logout == true)
             } else {
-                //Result.failure(Exception(extractError(resp.code(), resp.errorBody()?.string())))
+                Result.failure(Exception(extractError(resp.code(), resp.errorBody()?.string())))
 
-                Result.failure(
-                    Exception("HTTP ${resp.code()}: " + extractError(resp.code(), resp.errorBody()?.string()))
-                )
+//                Result.failure(
+//                    Exception("HTTP ${resp.code()}: " + extractError(resp.code(), resp.errorBody()?.string()))
+//                )
             }
         } catch (io: IOException) {
             Result.failure(Exception("Network error — please check your connection"))
