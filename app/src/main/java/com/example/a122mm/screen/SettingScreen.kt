@@ -117,13 +117,20 @@ fun AccountSettingsScreen(navController: NavController) {
             TopAppBar(
                 title = { Text("Account Settings", color = Color.White) },
                 navigationIcon = {
-                    IconButton(onClick = {
-                        navController.previousBackStackEntry
-                            ?.savedStateHandle
-                            ?.set("open_settings_drawer", true)
-                        navController.popBackStack()
-                    }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = null, tint = Color.White)
+                    IconButton(
+                        onClick = {
+                            navController.previousBackStackEntry
+                                ?.savedStateHandle
+                                ?.set("open_settings_drawer", true)
+                            navController.popBackStack()
+                        },
+                        modifier = Modifier.padding(start = 8.dp) // 👈 add some spacing
+                    ) {
+                        Icon(
+                            Icons.Default.ArrowBack,
+                            contentDescription = null,
+                            tint = Color.White
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -236,7 +243,9 @@ fun AccountSettingsScreen(navController: NavController) {
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable {
-                                        Toast.makeText(ctx, "Change password", Toast.LENGTH_SHORT).show()
+                                        //Toast.makeText(ctx, "Change password", Toast.LENGTH_SHORT).show()
+                                        navController.navigate("change_password")
+
                                     }
                             ) {
                                 Text(
