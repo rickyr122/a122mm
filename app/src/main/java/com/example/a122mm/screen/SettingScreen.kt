@@ -114,29 +114,37 @@ fun AccountSettingsScreen(navController: NavController) {
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Account Settings", color = Color.White) },
-                navigationIcon = {
-                    IconButton(
-                        onClick = {
-                            navController.previousBackStackEntry
-                                ?.savedStateHandle
-                                ?.set("open_settings_drawer", true)
-                            navController.popBackStack()
-                        },
-                        modifier = Modifier.padding(start = 8.dp) // 👈 add some spacing
-                    ) {
-                        Icon(
-                            Icons.Default.ArrowBack,
-                            contentDescription = null,
-                            tint = Color.White
+            Column(modifier = Modifier.padding(top = 8.dp)) {
+                TopAppBar(
+                    title = {
+                        Text(
+                            "Account Settings",
+                            color = Color.White,
+                            modifier = Modifier.padding(top = 4.dp) // move text slightly down
                         )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Black
+                    },
+                    navigationIcon = {
+                        IconButton(
+                            onClick = {
+                                navController.previousBackStackEntry
+                                    ?.savedStateHandle
+                                    ?.set("open_settings_drawer", true)
+                                navController.popBackStack()
+                            },
+                            modifier = Modifier.padding(start = 12.dp, top = 4.dp) // move arrow right & lower
+                        ) {
+                            Icon(
+                                Icons.Default.ArrowBack,
+                                contentDescription = null,
+                                tint = Color.White
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Black
+                    )
                 )
-            )
+            }
         },
         containerColor = Color.Black
     ) { inner ->
