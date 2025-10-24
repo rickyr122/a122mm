@@ -13,6 +13,7 @@ import com.example.a122mm.dataclass.HomeViewModel
 import com.example.a122mm.screen.AccountSettingsScreen
 import com.example.a122mm.screen.AuthScreen
 import com.example.a122mm.screen.ChangePasswordScreen
+import com.example.a122mm.screen.ChooseIconScreen
 import com.example.a122mm.screen.HomeScreen
 import com.example.a122mm.screen.LoginScreen
 import com.example.a122mm.screen.MainPlayerScreen
@@ -55,6 +56,11 @@ fun AppNavigation(
         composable("change_password") {
             ChangePasswordScreen(navController)
         }
+
+        composable("choose_icon") {
+            ChooseIconScreen(navController)
+        }
+
 
         composable("movie/{movieId}") { backStackEntry ->
             val movieId = backStackEntry.arguments?.getString("movieId") ?: ""

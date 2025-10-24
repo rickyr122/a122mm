@@ -38,6 +38,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -95,6 +96,18 @@ fun AccountSettingsScreen(navController: NavController) {
             if (username.isBlank() && !p.username.isNullOrBlank()) {
                 username = p.username!!
             }
+        }
+    }
+
+    val updatedLink = navController.currentBackStackEntry
+        ?.savedStateHandle
+        ?.getStateFlow<String?>("pp_link_updated", null)
+        ?.collectAsState(initial = null)?.value
+
+    LaunchedEffect(updatedLink) {
+        if (!updatedLink.isNullOrBlank()) {
+            // update your local avatar state here
+            avatarUrl = updatedLink   // whatever your state var is
         }
     }
 
@@ -184,7 +197,8 @@ fun AccountSettingsScreen(navController: NavController) {
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable {
-                                        Toast.makeText(ctx, "Change Profile Picture", Toast.LENGTH_SHORT).show()
+                                        navController.navigate("choose_icon")
+                                        //Toast.makeText(ctx, "Change Profile Picture", Toast.LENGTH_SHORT).show()
                                     }
                             ) {
                                 val imgMod = Modifier

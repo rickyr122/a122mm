@@ -2,6 +2,7 @@ package com.example.a122mm.auth
 
 import retrofit2.Response
 import retrofit2.http.Body
+import retrofit2.http.FormUrlEncoded
 import retrofit2.http.GET
 import retrofit2.http.POST
 
@@ -94,4 +95,35 @@ interface AuthApiService {
         val status: String?,        // "ok"
         val logout: Boolean? = null // server can ask client to log out
     )
+
+    // ---------- Profile Icon Picker ----------
+    data class IconItem(
+        val icon_id: Long,
+        val title: String,
+        val img_url: String
+    )
+    data class IconSection(
+        val section_code: String,
+        val title: String,
+        val icons: List<IconItem>
+    )
+    data class SetProfileRes(
+        val ok: Boolean? = null,
+        val pp_link: String? = null,
+        val error: String? = null
+    )
+
+    @GET("get_iconsections.php")
+    suspend fun iconSections(
+        @retrofit2.http.Query("user_id") userId: Int
+    ): Response<List<IconSection>>
+
+    @FormUrlEncoded
+    @POST("set_profilepicture.php")
+    suspend fun setProfilePicture(
+        @retrofit2.http.Field("user_id") userId: Int,
+        @retrofit2.http.Field("icon_id") iconId: Long?,      // nullable: some pics might be URL-only
+        @retrofit2.http.Field("img_url") imgUrl: String
+    ): Response<SetProfileRes>
+
 }

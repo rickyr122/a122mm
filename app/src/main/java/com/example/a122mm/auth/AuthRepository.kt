@@ -171,6 +171,46 @@ class AuthRepository(
             Result.failure(Exception("Unexpected error: ${t.message ?: "unknown"}"))
         }
     }
+
+    // ============ ICON PICKER ============
+    suspend fun loadIconSections(userId: Int): Result<List<AuthApiService.IconSection>> {
+        return try {
+            val r = authedApi.iconSections(userId)
+            if (r.isSuccessful && r.body() != null) {
+                Result.success(r.body()!!)
+            } else {
+                Result.failure(Exception(extractError(r.code(), r.errorBody()?.string())))
+            }
+        } catch (t: Throwable) {
+            Result.failure(Exception("Failed to load icons: ${t.message ?: "unknown"}"))
+        }
+    }
+
+    /** Saves current pp_link into history (server does it) and updates tm_users.pp_link. */
+    suspend fun setProfilePicture(userId: Int, icon: AuthApiService.IconItem): Result<String /*newUrl*/> {
+        return try {
+            val r = authedApi.setProfilePicture(
+                userId = userId,
+                iconId = icon.icon_id,
+                imgUrl = icon.img_url
+            )
+            if (r.isSuccessful && r.body()?.ok == true) {
+                Result.success(r.body()?.pp_link ?: icon.img_url)
+            } else {
+                val msg = r.body()?.error ?: extractError(r.code(), r.errorBody()?.string())
+                Result.failure(Exception(msg))
+            }
+        } catch (t: Throwable) {
+            Result.failure(Exception("Failed to update profile picture: ${t.message ?: "unknown"}"))
+        }
+    }
+
+    fun getUserId(context: Context): Int {
+        val prefs = context.getSharedPreferences("auth_prefs", Context.MODE_PRIVATE)
+        return prefs.getInt("user_id", 0) // 0 = not logged in / missing
+    }
+
+
 }
 
 /** Pulls "error" from server JSON; falls back to friendly per-code message. */
