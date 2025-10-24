@@ -19,12 +19,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material.icons.filled.Save
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -76,6 +75,8 @@ fun AccountSettingsScreen(navController: NavController) {
         )
     }
 
+    var userId   by remember { mutableStateOf(0) }
+
     // UI state
     var avatarUrl by remember { mutableStateOf<String?>(null) }
     var email     by remember { mutableStateOf<String?>(null) }
@@ -96,6 +97,7 @@ fun AccountSettingsScreen(navController: NavController) {
             if (username.isBlank() && !p.username.isNullOrBlank()) {
                 username = p.username!!
             }
+            userId = p.id
         }
     }
 
@@ -241,19 +243,72 @@ fun AccountSettingsScreen(navController: NavController) {
                             Spacer(Modifier.height(14.dp))
 
                             // Username
+                            var originalUsername by remember { mutableStateOf("") }
+                            var saving by remember { mutableStateOf(false) }
+
+                            LaunchedEffect(username) {
+                                if (originalUsername.isBlank() && username.isNotBlank()) {
+                                    originalUsername = username
+                                }
+                            }
+
+                            val isDirty = remember(username, originalUsername, saving, userId) {
+                                userId > 0 && username.trim() != originalUsername.trim() && !saving
+                            }
+
                             OutlinedTextField(
                                 value = username,
                                 onValueChange = { username = it },
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
-                                placeholder = { Text("Username", color = Color.Gray) },
+                                placeholder = { Text("Username") },
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedTextColor = Color.Black,
                                     unfocusedTextColor = Color.Black,
                                     cursorColor = Color.Black,
                                     focusedBorderColor = Color.Black,
-                                    unfocusedBorderColor = Color(0xFFBDBDBD)
-                                )
+                                    unfocusedBorderColor = Color.Gray
+                                ),
+                                trailingIcon = {
+                                    if (saving) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(20.dp),
+                                            strokeWidth = 2.dp
+                                        )
+                                    } else {
+                                        IconButton(
+                                            onClick = {
+                                                val newVal = username.trim()
+                                                if (newVal.isEmpty() || newVal == originalUsername.trim()) return@IconButton
+                                                saving = true
+                                                scope.launch {
+                                                    // Call the version that takes userId and username
+                                                    val res = repo.updateUsername(userId, newVal)
+                                                    saving = false
+                                                    res.onSuccess {
+                                                        originalUsername = newVal
+                                                        Toast.makeText(ctx, "Username updated", Toast.LENGTH_SHORT).show()
+
+                                                        // Tell ProfilePage to refetch its header
+                                                        navController.previousBackStackEntry
+                                                            ?.savedStateHandle
+                                                            ?.set("profile_needs_refresh", true)
+                                                    }.onFailure {
+                                                        Toast.makeText(ctx, it.message ?: "Update failed", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                }
+                                            }
+                                            ,
+                                            enabled = isDirty
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Save,
+                                                contentDescription = "Save username",
+                                                tint = if (isDirty) Color.Black else Color.Gray
+                                            )
+                                        }
+                                    }
+                                }
                             )
 
                             Spacer(Modifier.height(18.dp))
@@ -281,28 +336,28 @@ fun AccountSettingsScreen(navController: NavController) {
                         }
 
                         // Save button pinned bottom
-                        Button(
-                            onClick = {
-                                if (saving) return@Button
-                                saving = true
-                                scope.launch {
-                                    Toast.makeText(ctx, "Saved (stub)", Toast.LENGTH_SHORT).show()
-                                    saving = false
-                                }
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(48.dp),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color.Black),
-                            enabled = !saving
-                        ) {
-                            Text(
-                                if (saving) "Saving..." else "Save",
-                                color = Color.White,
-                                fontSize = 16.sp
-                            )
-                        }
+//                        Button(
+//                            onClick = {
+//                                if (saving) return@Button
+//                                saving = true
+//                                scope.launch {
+//                                    Toast.makeText(ctx, "Saved (stub)", Toast.LENGTH_SHORT).show()
+//                                    saving = false
+//                                }
+//                            },
+//                            modifier = Modifier
+//                                .fillMaxWidth()
+//                                .height(48.dp),
+//                            shape = RoundedCornerShape(10.dp),
+//                            colors = ButtonDefaults.buttonColors(containerColor = Color.Black),
+//                            enabled = !saving
+//                        ) {
+//                            Text(
+//                                if (saving) "Saving..." else "Save",
+//                                color = Color.White,
+//                                fontSize = 16.sp
+//                            )
+//                        }
                     }
                 }
             }

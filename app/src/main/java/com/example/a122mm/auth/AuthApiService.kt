@@ -128,4 +128,13 @@ interface AuthApiService {
         @Field("img_url") imgUrl: String
     ): Response<SetProfileRes>
 
+    data class GenericRes(val ok: Boolean? = null, val message: String? = null, val error: String? = null)
+
+    @FormUrlEncoded
+    @POST("update_profile.php")
+    suspend fun updateProfile(
+        @Field("user_id") userId: Int,
+        @Field("username") username: String
+    ): Response<GenericRes>
+
 }

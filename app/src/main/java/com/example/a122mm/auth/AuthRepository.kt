@@ -205,10 +205,21 @@ class AuthRepository(
         }
     }
 
-    fun getUserId(context: Context): Int {
-        val prefs = context.getSharedPreferences("auth_prefs", Context.MODE_PRIVATE)
-        return prefs.getInt("user_id", 0) // 0 = not logged in / missing
+//    fun getUserId(context: Context): Int {
+//        val prefs = context.getSharedPreferences("auth_prefs", Context.MODE_PRIVATE)
+//        return prefs.getInt("user_id", 0) // 0 = not logged in / missing
+//    }
+
+    suspend fun updateUsername(userId: Int, username: String): Result<Unit> {
+        return try {
+            val r = authedApi.updateProfile(userId, username)
+            if (r.isSuccessful && (r.body()?.ok == true)) Result.success(Unit)
+            else Result.failure(Exception(r.body()?.error ?: extractError(r.code(), r.errorBody()?.string())))
+        } catch (t: Throwable) {
+            Result.failure(Exception("Failed to update username: ${t.message ?: "unknown"}"))
+        }
     }
+
 
 
 }

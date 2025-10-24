@@ -103,6 +103,20 @@ fun ProfilePage(
         }
     }
 
+    val needsRefresh = navController.currentBackStackEntry
+        ?.savedStateHandle
+        ?.getStateFlow<Boolean>("profile_needs_refresh", false)
+        ?.collectAsState(initial = false)?.value
+
+    LaunchedEffect(needsRefresh) {
+        if (needsRefresh == true) {
+            // call your repo.profile() / loadProfilePic() here
+            // then reset the flag so it doesn’t loop
+            navController.currentBackStackEntry?.savedStateHandle?.set("profile_needs_refresh", false)
+        }
+    }
+
+
 
     Column (
         modifier = modifier // ✅ use the passed-in modifier
