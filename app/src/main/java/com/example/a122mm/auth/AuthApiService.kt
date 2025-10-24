@@ -2,9 +2,11 @@ package com.example.a122mm.auth
 
 import retrofit2.Response
 import retrofit2.http.Body
+import retrofit2.http.Field
 import retrofit2.http.FormUrlEncoded
 import retrofit2.http.GET
 import retrofit2.http.POST
+import retrofit2.http.Query
 
 interface AuthApiService {
     @POST("login.php")
@@ -115,15 +117,15 @@ interface AuthApiService {
 
     @GET("get_iconsections.php")
     suspend fun iconSections(
-        @retrofit2.http.Query("user_id") userId: Int
+        @Query("user_id") userId: Int
     ): Response<List<IconSection>>
 
     @FormUrlEncoded
     @POST("set_profilepicture.php")
     suspend fun setProfilePicture(
-        @retrofit2.http.Field("user_id") userId: Int,
-        @retrofit2.http.Field("icon_id") iconId: Long?,      // nullable: some pics might be URL-only
-        @retrofit2.http.Field("img_url") imgUrl: String
+        @Field("user_id") userId: Int,
+        @Field("icon_id") iconId: Long?,      // nullable: some pics might be URL-only
+        @Field("img_url") imgUrl: String
     ): Response<SetProfileRes>
 
 }

@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.Icon
@@ -39,6 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -49,6 +51,7 @@ import com.example.a122mm.auth.AuthApiService
 import com.example.a122mm.auth.AuthRepository
 import com.example.a122mm.auth.TokenStore
 import com.example.a122mm.dataclass.AuthNetwork
+import com.example.a122mm.helper.fixEncoding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -80,9 +83,37 @@ fun ChooseIconScreen(navController: NavController) {
     }
 
 
+    //var sections by remember { mutableStateOf<List<AuthApiService.IconSection>>(emptyList()) }
+    //var loading by remember { mutableStateOf(true) }
+    var applying by remember { mutableStateOf(false) }
+
+    //var userId by remember { mutableStateOf(0) }
     var sections by remember { mutableStateOf<List<AuthApiService.IconSection>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
-    var applying by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        // get real user id via token-authenticated profile
+        repo.profile()
+            .onSuccess { p ->
+                userId = p.id  // or p.user_id -> check your data class
+                // optional: persist for next time
+                context.getSharedPreferences("auth_prefs", 0)
+                    .edit().putInt("user_id", userId).apply()
+            }
+            .onFailure {
+                Toast.makeText(context, "Failed to load profile: ${it.message}", Toast.LENGTH_SHORT).show()
+            }
+    }
+
+    LaunchedEffect(userId) {
+        if (userId <= 0) return@LaunchedEffect
+        loading = true
+        repo.loadIconSections(userId)
+            .onSuccess { sections = it }
+            .onFailure { Toast.makeText(context, it.message ?: "Load failed", Toast.LENGTH_SHORT).show() }
+        loading = false
+    }
+
 
     // load sections once
     LaunchedEffect(Unit) {
@@ -97,7 +128,7 @@ fun ChooseIconScreen(navController: NavController) {
         topBar = {
             TopAppBar(
                 modifier = Modifier.statusBarsPadding(),
-                title = { Text("Choose Profile Icon", color = Color.White) },
+                title = { Text("Choose Icon", color = Color.White) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White)
@@ -136,7 +167,7 @@ fun ChooseIconScreen(navController: NavController) {
                     items(sections) { section ->
                         Column {
                             Text(
-                                text = section.title,
+                                text = section.title.fixEncoding(),
                                 color = Color.White,
                                 fontSize = 20.sp,
                                 fontWeight = FontWeight.SemiBold,
@@ -148,6 +179,8 @@ fun ChooseIconScreen(navController: NavController) {
                                     Box(
                                         modifier = Modifier
                                             .size(92.dp)
+                                            .clip(CircleShape)
+                                            .border(2.dp, Color.White, CircleShape)
                                             .clip(RoundedCornerShape(12.dp))
                                             .border(1.dp, Color(0xFF2A2A2A), RoundedCornerShape(12.dp))
                                             .clickable(enabled = !applying) {
@@ -177,7 +210,10 @@ fun ChooseIconScreen(navController: NavController) {
                                         AsyncImage(
                                             model = icon.img_url,
                                             contentDescription = icon.title,
-                                            modifier = Modifier.fillMaxSize()
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .clip(CircleShape),
+                                            contentScale = ContentScale.Crop
                                         )
                                     }
                                 }

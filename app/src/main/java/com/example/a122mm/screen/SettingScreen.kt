@@ -198,7 +198,7 @@ fun AccountSettingsScreen(navController: NavController) {
                                     .fillMaxWidth()
                                     .clickable {
                                         navController.navigate("choose_icon")
-                                        //Toast.makeText(ctx, "Change Profile Picture", Toast.LENGTH_SHORT).show()
+                                        //Toast.makeText(ctx, "Change Profile Icon", Toast.LENGTH_SHORT).show()
                                     }
                             ) {
                                 val imgMod = Modifier
@@ -218,7 +218,7 @@ fun AccountSettingsScreen(navController: NavController) {
 
                                 Spacer(Modifier.width(12.dp))
                                 Text(
-                                    "Change Profile Picture",
+                                    "Change Profile Icon",
                                     color = Color.Black,
                                     fontSize = 16.sp,
                                     modifier = Modifier.weight(1f)
