@@ -978,7 +978,10 @@ fun MainPlayerScreen(
                                 null
                             )
                         )
-                        setFixedTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 24f)
+                        val subtitleSizeSp = if (isTablet) 28f else 24f
+                        setFixedTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, subtitleSizeSp)
+
+                        // Optionally lift it slightly higher on large screens
                         setBottomPaddingFraction(0.05f)
                     }
                 }

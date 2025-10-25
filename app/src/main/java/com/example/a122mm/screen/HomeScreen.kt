@@ -2,8 +2,11 @@ package com.example.a122mm.screen
 
 import android.app.Activity
 import android.content.pm.ActivityInfo
+import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.os.Build
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ExperimentalAnimationApi
@@ -160,12 +163,26 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
 
     // 🔎 Focus control for Search TextField
     val focusRequester = remember { FocusRequester() }
+    var showSettings by rememberSaveable { mutableStateOf(false) }
 
     // System back = exit search
-    BackHandler(enabled = selectedItem == 1) {
-        selectedItem = lastNonSearchTab
-        searchQuery = ""
+    val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
+
+    BackHandler {
+        when {
+            showSettings -> {
+                showSettings = false
+            }
+            selectedItem != 0 -> {
+                selectedItem = 0
+                searchQuery = ""
+            }
+            else -> {
+                backDispatcher?.onBackPressed() // exit app
+            }
+        }
     }
+
 
     // Restore selected tab when coming back from detail page
 //    val savedStateHandle = navController.currentBackStackEntry?.savedStateHandle
@@ -277,7 +294,7 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
 
     var showLogoutSheet by rememberSaveable { mutableStateOf(false) }
 
-    var showSettings by rememberSaveable { mutableStateOf(false) }
+
     BackHandler(enabled = showSettings) { showSettings = false }
 
     val openSignalFlow = navController.currentBackStackEntry
@@ -967,15 +984,33 @@ fun SettingsDrawer(
 
         // Version info
         Spacer(Modifier.height(8.dp))
-        Text(
-            text = "Version: 1.0.0 build 1",
-            color = Color(0xFFAAAAAA),
-            fontSize = 12.sp,
-            modifier = Modifier.align(Alignment.CenterHorizontally)
-        )
+        AppVersionInfo()
 
         Spacer(Modifier.height(8.dp))
     }
+}
+
+@Composable
+fun AppVersionInfo() {
+    val context = LocalContext.current
+    val pm = context.packageManager
+    val pkg = context.packageName
+    val pkgInfo = if (Build.VERSION.SDK_INT >= 33)
+        pm.getPackageInfo(pkg, PackageManager.PackageInfoFlags.of(0))
+    else
+        @Suppress("DEPRECATION") pm.getPackageInfo(pkg, 0)
+
+    val versionName = pkgInfo.versionName
+    val versionCode = pkgInfo.longVersionCode
+
+    Spacer(Modifier.height(8.dp))
+    Text(
+        text = "Version: $versionName build $versionCode",
+        color = Color(0xFFAAAAAA),
+        fontSize = 12.sp,
+        modifier = Modifier.fillMaxWidth(),
+        textAlign = TextAlign.Center
+    )
 }
 
 @Composable
