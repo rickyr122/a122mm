@@ -5,6 +5,7 @@ import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.os.Build
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.animation.AnimatedContent
@@ -137,8 +138,12 @@ import com.example.a122mm.pages.MoviePage
 import com.example.a122mm.pages.ProfilePage
 import com.example.a122mm.pages.SearchPage
 import com.example.a122mm.pages.SeriesPage
+import com.example.a122mm.update.UpdateRepository
 import com.example.a122mm.utility.getDeviceId
+import com.example.a122mm.update.VersionInfo
 import kotlinx.coroutines.launch
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
 
 // Local state to hold devices
 data class UiDevice(
@@ -789,6 +794,18 @@ fun SettingsDrawer(
             )
         }
 
+        // -- Update repo (Retrofit to your Cloudflare host)
+        val updateRepo = remember {
+            val retrofit = Retrofit.Builder()
+                .baseUrl("https://videos.122movies.my.id/")   // serves /app/version.json
+                .addConverterFactory(GsonConverterFactory.create())
+                .build()
+            val api = retrofit.create(com.example.a122mm.update.UpdateApiService::class.java)
+            UpdateRepository(api)
+        }
+
+
+
 
 
         var devices by remember { mutableStateOf<List<UiDevice>>(emptyList()) }
@@ -955,32 +972,43 @@ fun SettingsDrawer(
         //Divider(color = Color(0x22FFFFFF))
         //Spacer(Modifier.height(12.dp))
 
-        // 🔥 SIGN OUT button (red block)
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(50.dp)
-                .background(Color(0xFFE50914), shape = RoundedCornerShape(3.dp)) // Netflix red
-                .clickable {
-                    scope.launch {
-//                    try {
-//                        val thisId = getDeviceId(context)
-//                        // tell server to revoke & delete this device row
-//                        repo.logoutDevice(thisId).onFailure { throw it }
-//                    } catch (_: Exception) { /* optional toast/log */ }
-                    // now do your existing local clear + nav
-                    onLogout()
-                    }
-                },
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                "Sign Out",
-                color = Color.White,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
+//        // 🔥 SIGN OUT button (red block)
+//        Box(
+//            modifier = Modifier
+//                .fillMaxWidth()
+//                .height(50.dp)
+//                .background(Color(0xFFE50914), shape = RoundedCornerShape(3.dp)) // Netflix red
+//                .clickable {
+//                    scope.launch {
+//                    onLogout()
+//                    }
+//                },
+//            contentAlignment = Alignment.Center
+//        ) {
+//            Text(
+//                "Sign Out",
+//                color = Color.White,
+//                fontSize = 16.sp,
+//                fontWeight = FontWeight.Bold
+//            )
+//        }
+
+        Spacer(Modifier.height(12.dp))
+
+        CheckUpdateButton(
+            updateRepo = updateRepo,
+            onForce = { info ->
+                Toast.makeText(context, "Update required: ${info.versionName}", Toast.LENGTH_LONG).show()
+                updateRepo.downloadApk(context, info.apkUrl)    // starts DownloadManager
+            },
+            onOptional = { info ->
+                Toast.makeText(context, "New version ${info.versionName} available!", Toast.LENGTH_LONG).show()
+                updateRepo.downloadApk(context, info.apkUrl)
+            },
+            onUpToDate = {
+                Toast.makeText(context, "You're already up to date!", Toast.LENGTH_SHORT).show()
+            }
+        )
 
         // Version info
         Spacer(Modifier.height(8.dp))
@@ -995,22 +1023,93 @@ fun AppVersionInfo() {
     val context = LocalContext.current
     val pm = context.packageManager
     val pkg = context.packageName
-    val pkgInfo = if (Build.VERSION.SDK_INT >= 33)
-        pm.getPackageInfo(pkg, PackageManager.PackageInfoFlags.of(0))
-    else
-        @Suppress("DEPRECATION") pm.getPackageInfo(pkg, 0)
 
-    val versionName = pkgInfo.versionName
-    val versionCode = pkgInfo.longVersionCode
+    // Get PackageInfo safely for all Android versions
+    val pkgInfo = try {
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            pm.getPackageInfo(pkg, android.content.pm.PackageManager.PackageInfoFlags.of(0))
+        } else {
+            @Suppress("DEPRECATION")
+            pm.getPackageInfo(pkg, 0)
+        }
+    } catch (e: Exception) {
+        null
+    }
+
+    val versionName = pkgInfo?.versionName ?: "?.?"
+    val versionCode = pkgInfo?.longVersionCode ?: 0L
 
     Spacer(Modifier.height(8.dp))
     Text(
-        text = "Version: $versionName build $versionCode",
+        text = "Version: $versionName (build $versionCode)",
         color = Color(0xFFAAAAAA),
         fontSize = 12.sp,
-        modifier = Modifier.fillMaxWidth(),
-        textAlign = TextAlign.Center
+        textAlign = TextAlign.Center,
+        modifier = Modifier.fillMaxWidth()
     )
+}
+
+@Composable
+fun CheckUpdateButton(
+    updateRepo: UpdateRepository,
+    onForce: (VersionInfo) -> Unit,
+    onOptional: (VersionInfo) -> Unit,
+    onUpToDate: () -> Unit
+) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var isChecking by remember { mutableStateOf(false) }
+
+    Button(
+        onClick = {
+            scope.launch {
+                isChecking = true
+                try {
+                    val result = updateRepo.fetchRemote()
+                    result.onSuccess { remote ->
+                        val pkgInfo = ctx.packageManager.getPackageInfo(ctx.packageName, 0)
+                        val currentCode = pkgInfo.longVersionCode
+
+                        if (updateRepo.needsUpdate(remote, currentCode)) {
+                            if (updateRepo.isForced(remote, currentCode)) onForce(remote)
+                            else onOptional(remote)
+                        } else {
+                            onUpToDate()
+                        }
+                    }.onFailure {
+                        Toast.makeText(ctx, "Update check failed: ${it.message}", Toast.LENGTH_SHORT).show()
+                    }
+                } finally {
+                    isChecking = false
+                }
+            }
+        },
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(50.dp),
+        enabled = !isChecking,
+        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF202020)),
+        shape = RoundedCornerShape(3.dp)
+    ) {
+        if (isChecking) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                CircularProgressIndicator(
+                    strokeWidth = 2.dp,
+                    modifier = Modifier
+                        .size(18.dp)
+                        .padding(end = 10.dp),
+                    color = Color.White
+                )
+                Text("Checking…", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            }
+        } else {
+            Text("Check for Updates", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        }
+    }
 }
 
 @Composable
@@ -1445,7 +1544,7 @@ private fun DeviceRow(
             shape = RoundedCornerShape(8.dp),
             modifier = Modifier.height(36.dp)
         ) {
-            Text("Log Out", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            Text("Sign Out", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
         }
     }
 }
