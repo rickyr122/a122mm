@@ -104,3 +104,32 @@ dependencies {
 
 
 }
+
+// === AUTO-GENERATE version.json AFTER BUILD ===
+tasks.register("generateVersionJson") {
+    doLast {
+        val versionName = android.defaultConfig.versionName
+        val versionCode = android.defaultConfig.versionCode
+        val outputDir = file("${buildDir}/outputs/version")
+        outputDir.mkdirs()
+
+        val jsonFile = file("${outputDir}/version.json")
+        jsonFile.writeText(
+            """
+            {
+              "versionName": "$versionName",
+              "versionCode": $versionCode,
+              "apkUrl": "https://videos.122movies.my.id/app/app-release-$versionCode.apk"
+            }
+            """.trimIndent()
+        )
+        println("✅ Generated version.json at: ${jsonFile.absolutePath}")
+    }
+}
+
+// Hook this task to run after the release build
+gradle.projectsEvaluated {
+    tasks.named("assembleRelease") {
+        finalizedBy("generateVersionJson")
+    }
+}

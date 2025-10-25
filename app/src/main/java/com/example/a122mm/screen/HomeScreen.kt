@@ -308,6 +308,50 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
 
     val openSignal = openSignalFlow?.collectAsState()
 
+    // Update repo (shared in HomeScreen)
+    val updateRepo = remember {
+        val retrofit = Retrofit.Builder()
+            .baseUrl("https://videos.122movies.my.id/")
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+        val api = retrofit.create(com.example.a122mm.update.UpdateApiService::class.java)
+        UpdateRepository(api)
+    }
+
+    LaunchedEffect(Unit) {
+        // 1) If Splash told us it's a forced update, open settings and start download
+        val s = navController.getBackStackEntry("home").savedStateHandle
+        val forcedUrl: String? = s.get<String>("forced_update_apk_url")
+        if (forcedUrl != null) {
+            // Open the Settings drawer
+            selectedItem = 3
+            showSettings = true
+            // Start download (use captured context, NOT LocalContext.current here)
+            updateRepo.downloadApk(context, forcedUrl)
+            // Clear the flag
+            s["forced_update_apk_url"] = null
+            return@LaunchedEffect
+        }
+
+        // 2) Otherwise, do a gentle one-time check
+        val remote = runCatching { updateRepo.fetchRemote().getOrNull() }.getOrNull()
+        if (remote != null) {
+            // If you want to be neat, do this on IO:
+            // val pkgInfo = withContext(Dispatchers.IO) {
+            //     context.packageManager.getPackageInfo(context.packageName, 0)
+            // }
+            val pkgInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+            val currentCode = pkgInfo.longVersionCode
+
+            if (updateRepo.needsUpdate(remote, currentCode)) {
+                Toast.makeText(context, "New version ${remote.versionName} available", Toast.LENGTH_LONG).show()
+                // Optional nudge to Settings:
+                // selectedItem = 3; showSettings = true
+            }
+        }
+    }
+
+
     LaunchedEffect(openSignal?.value) {
         if (openSignal?.value == true) {
             selectedItem = 3

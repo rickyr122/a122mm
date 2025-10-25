@@ -46,6 +46,35 @@ fun SplashRoute(nav: NavHostController) {
             val ok = withContext(Dispatchers.IO) { repo.pingAuthNoRefresh() }
 
             if (ok) {
+                // --- BEGIN: update check ---
+                // Build update repo (Retrofit instance to Cloudflare)
+                val retrofit = retrofit2.Retrofit.Builder()
+                    .baseUrl("https://videos.122movies.my.id/")
+                    .addConverterFactory(retrofit2.converter.gson.GsonConverterFactory.create())
+                    .build()
+                val updateApi = retrofit.create(com.example.a122mm.update.UpdateApiService::class.java)
+                val updateRepo = com.example.a122mm.update.UpdateRepository(updateApi)
+
+                // Read current installed version
+                val pkgInfo = withContext(Dispatchers.IO) {
+                    context.packageManager.getPackageInfo(context.packageName, 0)
+                }
+                val currentCode = pkgInfo.longVersionCode
+
+                // Fetch remote version.json
+                val remote = withContext(Dispatchers.IO) { updateRepo.fetchRemote().getOrNull() }
+
+                if (remote != null && updateRepo.needsUpdate(remote, currentCode)) {
+                    val isForced = updateRepo.isForced(remote, currentCode)
+                    if (isForced) {
+                        // Go to Home and tell it to open Settings and start forced update
+                        nav.navigate("home") { popUpTo("splash") { inclusive = true } }
+                        nav.getBackStackEntry("home").savedStateHandle["open_settings_drawer"] = true
+                        nav.getBackStackEntry("home").savedStateHandle["forced_update_apk_url"] = remote.apkUrl
+                        return@LaunchedEffect
+                    }
+                }
+                // --- END: update check ---
                 nav.navigate("home") { popUpTo("splash") { inclusive = true } }
             } else {
                 // 401 will also be caught by your interceptor (which clears tokens)
