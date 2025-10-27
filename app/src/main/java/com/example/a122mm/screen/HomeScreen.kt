@@ -173,6 +173,8 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
     // System back = exit search
     val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
 
+    val activity = LocalContext.current as Activity
+
     BackHandler {
         when {
             showSettings -> {
@@ -183,10 +185,18 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
                 searchQuery = ""
             }
             else -> {
-                backDispatcher?.onBackPressed() // exit app
+                // Try pop; if nothing to pop, close the app cleanly
+                val popped = navController.popBackStack()
+                if (!popped) {
+                    // Choose one:
+                    activity.finish()               // hard close
+                    // activity.moveTaskToBack(true) // or send app to background
+                    // activity.finishAffinity()     // close this task and any parents
+                }
             }
         }
     }
+
 
 
     // Restore selected tab when coming back from detail page
@@ -234,7 +244,7 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
     }
 
     val view = LocalView.current
-    val activity = LocalContext.current as Activity
+    //val activity = LocalContext.current as Activity
     SideEffect {
         val window = activity.window
         window.statusBarColor = android.graphics.Color.TRANSPARENT
@@ -300,7 +310,7 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
     var showLogoutSheet by rememberSaveable { mutableStateOf(false) }
 
 
-    BackHandler(enabled = showSettings) { showSettings = false }
+    //BackHandler(enabled = showSettings) { showSettings = false }
 
     val openSignalFlow = navController.currentBackStackEntry
         ?.savedStateHandle
