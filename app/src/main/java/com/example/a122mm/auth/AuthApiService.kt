@@ -50,8 +50,12 @@ interface AuthApiService {
         val username: String
     )
 
+    // AuthApiService.kt
     @GET("devices.php")
-    suspend fun listDevices(): Response<List<DeviceDto>>
+    suspend fun listDevices(
+        @Query("tz_offset_minutes") tzOffsetMinutes: Int
+    ): Response<List<DeviceDto>>
+
 
     @GET("me.php")
     suspend fun me(): Response<Map<String, Any>>

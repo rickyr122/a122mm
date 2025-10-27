@@ -112,7 +112,8 @@ class AuthRepository(
     }
 
     suspend fun listDevices(): Result<List<AuthApiService.DeviceDto>> {
-        val r = authedApi.listDevices()
+        val offset = tzOffsetMinutesNow()
+        val r = authedApi.listDevices(offset)
         return if (r.isSuccessful && r.body() != null) Result.success(r.body()!!)
         else Result.failure(Exception("HTTP ${r.code()}"))
     }
