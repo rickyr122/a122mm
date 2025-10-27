@@ -33,21 +33,46 @@ fun SplashRoute(nav: NavHostController) {
 
     LaunchedEffect(Unit) {
         try {
-            // 1) Cheap local check: do we have tokens?
+            // 1) Local session check
             val hasLocal = withContext(Dispatchers.IO) { repo.hasSession() }
-
             if (!hasLocal) {
                 nav.navigate("login") { popUpTo("splash") { inclusive = true } }
                 return@LaunchedEffect
             }
 
-            // 2) Server check: is token still valid?
-//            val ok = withContext(Dispatchers.IO) { repo.pingAuth() }
-            val ok = withContext(Dispatchers.IO) { repo.pingAuthNoRefresh() }
+            // 2) Server validation
+            val ok = try {
+                withContext(Dispatchers.IO) { repo.pingAuthNoRefresh() }
+            } catch (e: retrofit2.HttpException) {
+                if (e.code() == 401) {
+                    // Invalid/expired token → go to login
+                    nav.navigate("login") { popUpTo("splash") { inclusive = true } }
+                    return@LaunchedEffect
+                } else {
+                    // Non-401 HTTP error → go to error
+                    nav.navigate("error") {
+                        popUpTo("splash") { inclusive = true }
+                    }
+                    nav.currentBackStackEntry?.arguments?.putString(
+                        "err_msg",
+                        "Server error: ${e.code()}"
+                    )
+                    return@LaunchedEffect
+                }
+            } catch (e: java.io.IOException) {
+                // No internet, timeout, etc.
+                nav.navigate("error") {
+                    popUpTo("splash") { inclusive = true }
+                }
+                nav.currentBackStackEntry?.arguments?.putString(
+                    "err_msg",
+                    "You're offline. Please check your connection."
+                )
+                return@LaunchedEffect
+            }
 
             if (ok) {
-                // --- BEGIN: update check ---
-                // Build update repo (Retrofit instance to Cloudflare)
+                // --- BEGIN: update check (unchanged) ---
                 val retrofit = retrofit2.Retrofit.Builder()
                     .baseUrl("https://videos.122movies.my.id/")
                     .addConverterFactory(retrofit2.converter.gson.GsonConverterFactory.create())
@@ -55,19 +80,16 @@ fun SplashRoute(nav: NavHostController) {
                 val updateApi = retrofit.create(com.example.a122mm.update.UpdateApiService::class.java)
                 val updateRepo = com.example.a122mm.update.UpdateRepository(updateApi)
 
-                // Read current installed version
                 val pkgInfo = withContext(Dispatchers.IO) {
                     context.packageManager.getPackageInfo(context.packageName, 0)
                 }
                 val currentCode = pkgInfo.longVersionCode
 
-                // Fetch remote version.json
                 val remote = withContext(Dispatchers.IO) { updateRepo.fetchRemote().getOrNull() }
 
                 if (remote != null && updateRepo.needsUpdate(remote, currentCode)) {
                     val isForced = updateRepo.isForced(remote, currentCode)
                     if (isForced) {
-                        // Go to Home and tell it to open Settings and start forced update
                         nav.navigate("home") { popUpTo("splash") { inclusive = true } }
                         nav.getBackStackEntry("home").savedStateHandle["open_settings_drawer"] = true
                         nav.getBackStackEntry("home").savedStateHandle["forced_update_apk_url"] = remote.apkUrl
@@ -75,16 +97,26 @@ fun SplashRoute(nav: NavHostController) {
                     }
                 }
                 // --- END: update check ---
+
                 nav.navigate("home") { popUpTo("splash") { inclusive = true } }
             } else {
-                // 401 will also be caught by your interceptor (which clears tokens)
+                // Explicit false → go to login
                 nav.navigate("login") { popUpTo("splash") { inclusive = true } }
             }
+
         } catch (t: Throwable) {
-            // On any unexpected error, play it safe and go to login
-            nav.navigate("login") { popUpTo("splash") { inclusive = true } }
+            // Any unexpected crash → error screen
+            nav.navigate("error") {
+                popUpTo("splash") { inclusive = true }
+            }
+            nav.currentBackStackEntry?.arguments?.putString(
+                "err_msg",
+                "Unexpected error: ${t.message ?: "Unknown"}"
+            )
         }
     }
+
+
 
     // Optional: minimal UI while we decide
     Box(

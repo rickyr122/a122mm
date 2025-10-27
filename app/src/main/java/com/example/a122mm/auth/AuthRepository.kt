@@ -7,6 +7,7 @@ import com.example.a122mm.utility.getDeviceId
 import com.example.a122mm.utility.getDeviceName
 import com.example.a122mm.utility.getDeviceType
 import org.json.JSONObject
+import retrofit2.HttpException
 import java.io.IOException
 
 class AuthRepository(
@@ -139,9 +140,25 @@ class AuthRepository(
         }
     }
 
-    suspend fun pingAuthNoRefresh(): Boolean = try {
-        authedApi.meNoRefresh().isSuccessful
-    } catch (_: Throwable) { false }
+//    suspend fun pingAuthNoRefresh(): Boolean = try {
+//        authedApi.meNoRefresh().isSuccessful
+//    } catch (_: Throwable) { false }
+
+    suspend fun pingAuthNoRefresh(): Boolean {
+        return try {
+            val resp = authedApi.meNoRefresh() // Response<...>
+            when {
+                resp.isSuccessful -> true               // 2xx → OK
+                resp.code() == 401 -> false             // 401 → invalid/expired token
+                else -> throw HttpException(resp)       // other 4xx/5xx → let caller handle
+            }
+        } catch (e: HttpException) {
+            if (e.code() == 401) false else throw e     // keep 401 as false, bubble others
+        } catch (e: IOException) {
+            throw e                                      // offline/timeout → let caller handle
+        }
+    }
+
 
     suspend fun changePassword(
         current: String,

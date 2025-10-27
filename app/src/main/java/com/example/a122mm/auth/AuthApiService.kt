@@ -5,6 +5,7 @@ import retrofit2.http.Body
 import retrofit2.http.Field
 import retrofit2.http.FormUrlEncoded
 import retrofit2.http.GET
+import retrofit2.http.Headers
 import retrofit2.http.POST
 import retrofit2.http.Query
 
@@ -61,8 +62,8 @@ interface AuthApiService {
     suspend fun me(): Response<Map<String, Any>>
 
     @GET("me.php")
-    @retrofit2.http.Headers("X-No-Refresh: 1")
-    suspend fun meNoRefresh(): retrofit2.Response<Map<String, Any>>
+    @Headers("X-No-Refresh: 1")
+    suspend fun meNoRefresh(): Response<Map<String, Any>>
 
     @POST("logout_device.php")
     suspend fun logoutDevice(@Body body: Map<String, String>): Response<Map<String, Any>>

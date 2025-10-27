@@ -14,6 +14,7 @@ import com.example.a122mm.screen.AccountSettingsScreen
 import com.example.a122mm.screen.AuthScreen
 import com.example.a122mm.screen.ChangePasswordScreen
 import com.example.a122mm.screen.ChooseIconScreen
+import com.example.a122mm.screen.ErrorRoute
 import com.example.a122mm.screen.HomeScreen
 import com.example.a122mm.screen.LoginScreen
 import com.example.a122mm.screen.MainPlayerScreen
@@ -60,6 +61,11 @@ fun AppNavigation(
         composable("choose_icon") {
             ChooseIconScreen(navController)
         }
+
+        composable("error") {
+            ErrorRoute(navController)
+        }
+
 
 
         composable("movie/{movieId}") { backStackEntry ->
