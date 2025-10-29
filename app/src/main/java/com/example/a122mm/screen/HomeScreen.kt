@@ -138,7 +138,11 @@ import com.example.a122mm.pages.MoviePage
 import com.example.a122mm.pages.ProfilePage
 import com.example.a122mm.pages.SearchPage
 import com.example.a122mm.pages.SeriesPage
+import com.example.a122mm.update.UpdateBus
+import com.example.a122mm.update.UpdateCleaner
+import com.example.a122mm.update.UpdateDialog
 import com.example.a122mm.update.UpdateRepository
+import com.example.a122mm.update.UpdateService
 import com.example.a122mm.utility.getDeviceId
 import com.example.a122mm.update.VersionInfo
 import kotlinx.coroutines.launch
@@ -174,6 +178,10 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
     val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
 
     val activity = LocalContext.current as Activity
+
+    var showUpdateDialog by remember { mutableStateOf(false) }
+    var updateProgress by remember { mutableStateOf(0) }
+    var updateError by remember { mutableStateOf<String?>(null) }
 
     BackHandler {
         when {
@@ -309,6 +317,19 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
 
     var showLogoutSheet by rememberSaveable { mutableStateOf(false) }
 
+    UpdateDialog(
+        visible = showUpdateDialog,
+        progress = updateProgress,
+        cancellable = false
+    )
+
+    // Mirror UpdateService progress into the startup dialog
+    val serviceProgress by UpdateBus.progress.collectAsState()
+    LaunchedEffect(serviceProgress) {
+        if (serviceProgress >= 0) updateProgress = serviceProgress
+        if (serviceProgress >= 100) showUpdateDialog = false
+    }
+
 
     //BackHandler(enabled = showSettings) { showSettings = false }
 
@@ -337,27 +358,54 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
             selectedItem = 3
             showSettings = true
             // Start download (use captured context, NOT LocalContext.current here)
-            updateRepo.downloadApk(context, forcedUrl)
+            showUpdateDialog = true
+            updateProgress = 0
+            UpdateService.start(context, forcedUrl)
             // Clear the flag
             s["forced_update_apk_url"] = null
             return@LaunchedEffect
         }
 
-        // 2) Otherwise, do a gentle one-time check
+        // 2) Otherwise, do a startup validation:
         val remote = runCatching { updateRepo.fetchRemote().getOrNull() }.getOrNull()
         if (remote != null) {
-            // If you want to be neat, do this on IO:
-            // val pkgInfo = withContext(Dispatchers.IO) {
-            //     context.packageManager.getPackageInfo(context.packageName, 0)
-            // }
             val pkgInfo = context.packageManager.getPackageInfo(context.packageName, 0)
             val currentCode = pkgInfo.longVersionCode
 
             if (updateRepo.needsUpdate(remote, currentCode)) {
-                Toast.makeText(context, "New version ${remote.versionName} available", Toast.LENGTH_LONG).show()
-                // Optional nudge to Settings:
-                // selectedItem = 3; showSettings = true
+                // Open update dialog and start download immediately
+                showUpdateDialog = true
+                updateProgress = 0
+                updateError = null
+
+                // Stream DownloadManager progress and auto-launch installer on finish
+//                Updater(context)
+//                    .downloadAndInstall(remote.apkUrl)
+//                    .collect { st ->
+//                        if (st.error != null) {
+//                            updateError = st.error
+//                            showUpdateDialog = false
+//                            Toast.makeText(context, "Update failed: ${st.error}", Toast.LENGTH_LONG).show()
+//                        } else {
+//                            updateProgress = st.progress
+//                            if (!st.isDownloading && st.progress >= 100) {
+//                                // Download done; system installer is now open
+//                                showUpdateDialog = false
+//                            }
+//                        }
+//                    }
+                // kick off the foreground service download
+                UpdateService.start(context, remote.apkUrl)
+                // show your dialog; progress comes from UpdateBus
+                //showProgress = true
+
+            } else {
+                // No update → clean old APKs left from previous runs
+                UpdateCleaner.cleanOldApks(context)
             }
+        } else {
+            // If manifest couldn’t be fetched, still try to clean leftovers
+            UpdateCleaner.cleanOldApks(context)
         }
     }
 
@@ -1053,11 +1101,11 @@ fun SettingsDrawer(
             updateRepo = updateRepo,
             onForce = { info ->
                 Toast.makeText(context, "Update required: ${info.versionName}", Toast.LENGTH_LONG).show()
-                updateRepo.downloadApk(context, info.apkUrl)    // starts DownloadManager
+                UpdateService.start(context, info.apkUrl)
             },
             onOptional = { info ->
-                Toast.makeText(context, "New version ${info.versionName} available!", Toast.LENGTH_LONG).show()
-                updateRepo.downloadApk(context, info.apkUrl)
+                Toast.makeText(context, "New version ${info.versionName} Build ${info.versionCode} available!", Toast.LENGTH_LONG).show()
+                UpdateService.start(context, info.apkUrl)
             },
             onUpToDate = {
                 Toast.makeText(context, "You're already up to date!", Toast.LENGTH_SHORT).show()
@@ -1095,7 +1143,7 @@ fun AppVersionInfo() {
 
     Spacer(Modifier.height(8.dp))
     Text(
-        text = "Version: $versionName (build $versionCode)",
+        text = "Version: $versionName build $versionCode",
         color = Color(0xFFAAAAAA),
         fontSize = 12.sp,
         textAlign = TextAlign.Center,
@@ -1106,30 +1154,75 @@ fun AppVersionInfo() {
 @Composable
 fun CheckUpdateButton(
     updateRepo: UpdateRepository,
-    onForce: (VersionInfo) -> Unit,
+    onForce: (VersionInfo) -> Unit,   // keep signatures if you still want to branch
     onOptional: (VersionInfo) -> Unit,
     onUpToDate: () -> Unit
 ) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
+
     var isChecking by remember { mutableStateOf(false) }
+    var showProgress by remember { mutableStateOf(false) }
+    var progress by remember { mutableStateOf(0) }
+    var errorText by remember { mutableStateOf<String?>(null) }
+
+    // At the top of CheckUpdateButton composable:
+    val busProgress by UpdateBus.progress.collectAsState()
+    LaunchedEffect(busProgress) {
+        if (busProgress >= 0) progress = busProgress
+        if (busProgress >= 100) showProgress = false
+    }
+
+    // Progress dialog (blocks dismissal)
+    UpdateDialog(
+        visible = showProgress,
+        progress = progress,
+        cancellable = false
+    )
 
     Button(
         onClick = {
             scope.launch {
                 isChecking = true
+                errorText = null
                 try {
+                    // 1) Check server manifest
                     val result = updateRepo.fetchRemote()
                     result.onSuccess { remote ->
                         val pkgInfo = ctx.packageManager.getPackageInfo(ctx.packageName, 0)
                         val currentCode = pkgInfo.longVersionCode
 
-                        if (updateRepo.needsUpdate(remote, currentCode)) {
-                            if (updateRepo.isForced(remote, currentCode)) onForce(remote)
-                            else onOptional(remote)
-                        } else {
+                        if (!updateRepo.needsUpdate(remote, currentCode)) {
                             onUpToDate()
+                            return@onSuccess
                         }
+
+                        // Optional/forced hooks (toast etc.)
+                        if (updateRepo.isForced(remote, currentCode)) onForce(remote) else onOptional(remote)
+
+                        // 2) Start downloading with progress
+                        //showProgress = true
+                        //progress = 0
+
+//                        Updater(ctx)
+//                            .downloadAndInstall(remote.apkUrl)
+//                            .collect { st ->
+//                                if (st.error != null) {
+//                                    errorText = st.error
+//                                    showProgress = false
+//                                } else {
+//                                    progress = st.progress
+//                                    if (!st.isDownloading && st.progress >= 100) {
+//                                        // Download finished; installer launched automatically.
+//                                        showProgress = false
+//                                    }
+//                                }
+//                            }
+
+                        // REPLACE WITH this:
+                        UpdateService.start(ctx, remote.apkUrl)
+                        showProgress = true
+                        progress = 0
                     }.onFailure {
                         Toast.makeText(ctx, "Update check failed: ${it.message}", Toast.LENGTH_SHORT).show()
                     }
@@ -1163,6 +1256,11 @@ fun CheckUpdateButton(
         } else {
             Text("Check for Updates", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
         }
+    }
+
+    // Optional: toast any download error
+    LaunchedEffect(errorText) {
+        errorText?.let { Toast.makeText(ctx, it, Toast.LENGTH_LONG).show() }
     }
 }
 
