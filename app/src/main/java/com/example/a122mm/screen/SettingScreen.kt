@@ -234,7 +234,7 @@ fun AccountSettingsScreen(navController: NavController) {
 
                             // Email
                             Text(
-                                text = email ?: "Your registered email here",
+                                text = email ?: "Loading your registered email...",
                                 color = Color.Black,
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.SemiBold

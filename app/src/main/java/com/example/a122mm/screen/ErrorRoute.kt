@@ -32,7 +32,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun ErrorRoute(nav: NavHostController) {
     // Pull info from the previous destination
-    val args = nav.previousBackStackEntry?.arguments
+    val args = nav.currentBackStackEntry?.arguments
     val msg = args?.getString("err_msg") ?: "Something went wrong."
     val retryRoute = args?.getString("retry_route") ?: "home"
 
@@ -82,6 +82,7 @@ fun ErrorRoute(nav: NavHostController) {
                             // Navigate back to the screen that failed
                             nav.navigate(retryRoute) {
                                 popUpTo("error") { inclusive = true }
+                                launchSingleTop = true
                             }
                             // No need to reset loading; this composable will be disposed after navigate
                         }

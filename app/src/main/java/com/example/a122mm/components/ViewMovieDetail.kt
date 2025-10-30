@@ -94,6 +94,7 @@ import com.example.a122mm.sections.TabTrailer
 import com.example.a122mm.sections.TrailerItem
 import com.example.a122mm.sections.TvEpisodes
 import com.example.a122mm.utility.formatDurationFromMinutes
+import com.example.a122mm.utility.navigateToError
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -202,7 +203,23 @@ fun ViewMovieDetail(
     var movie by remember { mutableStateOf<MovieDetail?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
 
-    val api = NetworkModule.mApiService
+    val api = mApiService
+
+    // Prevent multiple navigations if recomposed while error is set
+    var errorNavigated by remember { mutableStateOf(false) }
+
+    LaunchedEffect(movieId) {
+        try {
+            movie = api.getMovie(movieId)
+        } catch (e: Exception) {
+            error = e.message ?: "Load failed"
+            if (!errorNavigated) {
+                errorNavigated = true
+                // Retry should bring you back to this detail page
+                navController.navigateToError(error, retryRoute = "movie/$movieId")
+            }
+        }
+    }
 
     val view = LocalView.current
     val activity = LocalContext.current as Activity
@@ -277,7 +294,7 @@ fun ViewMovieDetail(
                 }
             )
         }
-        error != null -> Text("Error: $error", color = Color.Red, modifier = Modifier.padding(16.dp))
+        //error != null -> Text("Error: $error", color = Color.Red, modifier = Modifier.padding(16.dp))
         else -> {
             Box(
                 modifier = Modifier
