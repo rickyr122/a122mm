@@ -3,6 +3,7 @@ package com.example.a122mm
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -24,7 +25,7 @@ import com.example.a122mm.screen.VideoPlayerScreen
 
 @Composable
 fun AppNavigation(
-    navController: androidx.navigation.NavHostController,
+    navController: NavHostController,
     modifier: Modifier = Modifier) {
 
     //val navController = rememberNavController()
