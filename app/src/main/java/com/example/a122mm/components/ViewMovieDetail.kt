@@ -81,6 +81,9 @@ import androidx.core.view.WindowCompat
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.example.a122mm.R
+import com.example.a122mm.auth.AuthRepository
+import com.example.a122mm.auth.TokenStore
+import com.example.a122mm.dataclass.AuthNetwork
 import com.example.a122mm.dataclass.NetworkModule
 import com.example.a122mm.dataclass.NetworkModule.mApiService
 import com.example.a122mm.helper.fixEncoding
@@ -176,12 +179,15 @@ interface MovieApiService {
     @POST("addmylist")
     suspend fun addToMyList(
         @Field("mId") mId: String,
-        @Field("client_time") clientTime: String
+        @Field("client_time") clientTime: String,
+        @Field("user_id") userId: Int
     ): retrofit2.Response<Unit>
 
     @FormUrlEncoded
     @POST("removemylist")
-    suspend fun removeFromMyList(@Field("mId") mId: String
+    suspend fun removeFromMyList(
+        @Field("mId") mId: String,
+        @Field("user_id") userId: Int
     ): retrofit2.Response<Unit>
 
     @FormUrlEncoded
@@ -327,6 +333,16 @@ fun MovieDetailContent(
 //    LaunchedEffect(Unit) {
 //        if (!isTablet) context.setScreenOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT)
 //    }
+
+    val repo = remember {
+        AuthRepository(
+            publicApi = AuthNetwork.publicAuthApi,
+            authedApi = AuthNetwork.authedAuthApi(context),
+            store = TokenStore(context)
+        )
+    }
+    val userId = remember { repo.getUserId(context) }
+
 
     val rtState = movie.rt_state
 
@@ -814,9 +830,9 @@ fun MovieDetailContent(
                                                 .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
                                             val newValue = if (isCurrentlyInList) "0" else "1"
                                             val response = if (isCurrentlyInList)
-                                                                api.removeFromMyList(sId)
+                                                                api.removeFromMyList(sId, userId)
                                                            else
-                                                               api.addToMyList(sId,clientTime)
+                                                               api.addToMyList(sId,clientTime, userId)
 
                                             if (response.isSuccessful) {
                                                 withContext(Dispatchers.Main) {

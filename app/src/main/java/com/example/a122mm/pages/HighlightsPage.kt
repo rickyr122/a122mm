@@ -58,9 +58,15 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
+import com.example.a122mm.auth.AuthRepository
+import com.example.a122mm.auth.TokenStore
 import com.example.a122mm.dataclass.ApiClient
+import com.example.a122mm.dataclass.AuthNetwork
+import com.example.a122mm.helper.InListCache
 import com.example.a122mm.helper.InListCache.get
 import com.example.a122mm.helper.fixEncoding
+import com.example.a122mm.helper.updateInList
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import retrofit2.Response
@@ -96,12 +102,16 @@ interface HighlightsApi {
     @POST("addmylist")
     suspend fun addToMyList(
         @Field("mId") mId: String,
-        @Field("client_time") clientTime: String
+        @Field("client_time") clientTime: String,
+        @Field("user_id") userId: Int
     ): Response<Unit>
 
     @FormUrlEncoded
     @POST("removemylist")
-    suspend fun removeFromMyList(@Field("mId") mId: String): Response<Unit>
+    suspend fun removeFromMyList(
+        @Field("mId") mId: String,
+        @Field("user_id") userId: Int
+    ): Response<Unit>
 }
 
 // ===== UI model =====
@@ -293,10 +303,19 @@ private fun HighlightCard(
     }
 
     // 2) react to any later override changes published from anywhere
-    val overrides = com.example.a122mm.helper.InListCache.map.collectAsStateWithLifecycle().value
+    val overrides = InListCache.map.collectAsStateWithLifecycle().value
     LaunchedEffect(overrides[item.mId]) {
         overrides[item.mId]?.let { localInList = it }
     }
+
+    val repo = remember {
+        AuthRepository(
+            publicApi = AuthNetwork.publicAuthApi,
+            authedApi = AuthNetwork.authedAuthApi(context),
+            store = TokenStore(context)
+        )
+    }
+    val userId = remember { repo.getUserId(context) }
 
     Box(modifier = Modifier.fillMaxWidth()) {
 
@@ -516,14 +535,14 @@ private fun HighlightCard(
                                     .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
                                 val resp = try {
                                     if (currentlyIn)
-                                        myListApi.removeFromMyList(item.mId)
+                                        myListApi.removeFromMyList(item.mId, userId)
                                     else
-                                        myListApi.addToMyList(item.mId, clientTime)
+                                        myListApi.addToMyList(item.mId, clientTime, userId)
                                 } catch (_: Throwable) { null }
 
                                 if (resp?.isSuccessful == true) {
-                                    com.example.a122mm.helper.updateInList(item.mId, nextValue, context)
-                                    withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                    updateInList(item.mId, nextValue, context)
+                                    withContext(Dispatchers.Main) {
                                         // 1) instant local flip
                                         localInList = nextValue
                                         // 2) patch VM cache → UI updates without a reload

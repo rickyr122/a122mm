@@ -48,6 +48,9 @@ import androidx.palette.graphics.Palette
 import coil.ImageLoader
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.example.a122mm.auth.AuthRepository
+import com.example.a122mm.auth.TokenStore
+import com.example.a122mm.dataclass.AuthNetwork
 import com.example.a122mm.dataclass.NetworkModule
 import com.example.a122mm.utility.BannerStorage
 import kotlinx.coroutines.Dispatchers
@@ -86,12 +89,15 @@ interface ApiService {
     @POST("addmylist")
     suspend fun addToMyList(
         @Field("mId") mId: String,
-        @Field("client_time") clientTime: String
+        @Field("client_time") clientTime: String,
+        @Field("user_id") userId: Int
     ): retrofit2.Response<Unit>
 
     @FormUrlEncoded
     @POST("removemylist")
-    suspend fun removeFromMyList(@Field("mId") mId: String
+    suspend fun removeFromMyList(
+        @Field("mId") mId: String,
+        @Field("user_id") userId: Int
     ): retrofit2.Response<Unit>
 }
 
@@ -119,12 +125,21 @@ fun ViewBanner(
     var bannerData by remember { mutableStateOf<BannerResponse?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
+    val context = LocalContext.current
+
     //var isInList by remember { mutableStateOf(false) } // ✅ Safe default
+    val repo = remember {
+        AuthRepository(
+            publicApi = AuthNetwork.publicAuthApi,
+            authedApi = AuthNetwork.authedAuthApi(context),
+            store = TokenStore(context)
+        )
+    }
+    val userId = remember { repo.getUserId(context) } // returns 0 if missing
+
 
     // 👇 Local dominant color just for ViewBanner's gradient
     var localDominantColor by remember { mutableStateOf(Color(0xFF262626)) }
-
-    val context = LocalContext.current
 
     LaunchedEffect(type) {
         val (cachedJson, cachedColor, expired) = BannerStorage.loadBanner(context, type)
@@ -318,13 +333,13 @@ fun ViewBanner(
                                                 val isCurrentlyInList = banner.inList == "1"
                                                 val newInListValue = if (isCurrentlyInList) "0" else "1"
                                                 val response = if (isCurrentlyInList) {
-                                                    api.removeFromMyList(banner.mId)
+                                                    api.removeFromMyList(banner.mId, userId)
                                                 } else {
                                                     val clientTime = LocalDateTime.now()
                                                         .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
 
 
-                                                    api.addToMyList(banner.mId, clientTime)
+                                                    api.addToMyList(banner.mId, clientTime, userId)
                                                 }
 
                                                 if (response.isSuccessful) {
