@@ -1,6 +1,8 @@
 package com.example.a122mm.components
 
+import android.content.Context
 import android.graphics.pdf.LoadParams
+import android.util.Log
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -41,6 +43,7 @@ import androidx.navigation.NavController
 import androidx.paging.LoadState
 import androidx.paging.Pager
 import androidx.paging.PagingConfig
+import androidx.paging.PagingData
 import androidx.paging.PagingSource
 import androidx.paging.PagingState
 import androidx.paging.cachedIn
@@ -48,7 +51,11 @@ import androidx.paging.compose.collectAsLazyPagingItems
 import coil.compose.AsyncImage
 import coil.request.CachePolicy
 import coil.request.ImageRequest
+import com.example.a122mm.auth.AuthRepository
+import com.example.a122mm.auth.TokenStore
 import com.example.a122mm.dataclass.ApiClient
+import com.example.a122mm.dataclass.AuthNetwork
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -73,21 +80,23 @@ interface ApiServiceContent {
     suspend fun getHomeMenu(
         @Query("code") code: Int,
         @Query("page") page: Int,
-        @Query("pageSize") pageSize: Int
+        @Query("pageSize") pageSize: Int,
+        @Query("user_id") userId: Int
     ): HomeMenuResponse // List<UnwatchedResponseContent>
 }
 
 class PosterPagingSource(
     private val apiService: ApiServiceContent,
-    private val code: Int
+    private val code: Int,
+    private val userId: Int
 ) : PagingSource<Int, UnwatchedResponseContent>() {
 
     override suspend fun load(params: LoadParams<Int>): LoadResult<Int, UnwatchedResponseContent> {
         return try {
             val page = params.key ?: 1
-            val response = apiService.getHomeMenu(code, page, params.loadSize)
+            val response = apiService.getHomeMenu(code, page, params.loadSize, userId)
             LoadResult.Page(
-                data = response.items, // ✅ extract the list
+                data = response.items,
                 prevKey = if (page == 1) null else page - 1,
                 nextKey = if (response.items.isEmpty()) null else page + 1
             )
@@ -104,38 +113,84 @@ class PosterPagingSource(
     }
 }
 
-class PosterViewModel(private val code: Int) : ViewModel() {
+class PosterViewModel(
+    private val code: Int,
+    private val appContext: Context
+) : ViewModel() {
+
     private val apiService = ApiClient.create(ApiServiceContent::class.java)
+    private val repo = AuthRepository(
+        publicApi = AuthNetwork.publicAuthApi,
+        authedApi = AuthNetwork.authedAuthApi(appContext),
+        store = TokenStore(appContext)
+    )
 
     private val _title = MutableStateFlow("Loading...")
     val title: StateFlow<String> = _title
 
+    private val _userId = MutableStateFlow(0)
+    val userId: StateFlow<Int> = _userId
+
+    // Expose the pager lazily after we have a real user_id.
+    // Your Composable can observe this and start collecting when it's non-null.
+    private val _pager =
+        MutableStateFlow<Flow<PagingData<UnwatchedResponseContent>>?>(null)
+    val pager: StateFlow<Flow<PagingData<UnwatchedResponseContent>>?> = _pager
+
     init {
         viewModelScope.launch {
-            try {
-                val response = apiService.getHomeMenu(code, page = 1, pageSize = 1)
-                _title.value = response.title
-            } catch (e: Exception) {
-                _title.value = "Unknown"
-            }
+            // 1) Get real user_id (same pattern as ChooseIconScreen)
+            repo.profile()
+                .onSuccess { profile ->
+                    val uid = profile.id
+                    _userId.value = uid
+
+                    // persist for reuse if you want
+                    appContext.getSharedPreferences("auth_prefs", 0)
+                        .edit().putInt("user_id", uid).apply()
+
+                    // 2) Fetch the section title using the real user_id
+                    runCatching {
+                        apiService.getHomeMenu(
+                            code = code,
+                            page = 1,
+                            pageSize = 1,
+                            userId = uid
+                        )
+                    }.onSuccess { res ->
+                        _title.value = res.title
+                    }.onFailure {
+                        _title.value = "Unknown"
+                        Log.e("HomeMenuDebug", "getHomeMenu (title) failed", it)
+                    }
+
+                    // 3) Build Pager AFTER we have user_id so every load carries it
+                    _pager.value = Pager(
+                        config = PagingConfig(pageSize = 20, initialLoadSize = 20),
+                        pagingSourceFactory = {
+                            PosterPagingSource(apiService, code, uid)
+                        }
+                    ).flow.cachedIn(viewModelScope)
+                }
+                .onFailure {
+                    Log.e("HomeMenuDebug", "Failed to fetch profile: ${it.message}")
+                    _title.value = "Unknown"
+                }
         }
     }
 
-    val pager = Pager(
-        config = PagingConfig(
-            pageSize = 20,
-            initialLoadSize = 20
-        ),
-        pagingSourceFactory = { PosterPagingSource(apiService, code) }
-    ).flow.cachedIn(viewModelScope)
-
-    class Factory(private val code: Int) : ViewModelProvider.Factory {
+    class Factory(
+        private val code: Int,
+        private val appContext: Context
+    ) : ViewModelProvider.Factory {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             @Suppress("UNCHECKED_CAST")
-            return PosterViewModel(code) as T
+            return PosterViewModel(code, appContext.applicationContext) as T
         }
     }
 }
+
+
 
 @Composable
 fun ViewContent(
@@ -147,18 +202,23 @@ fun ViewContent(
     currentTabIndex: Int,
     type: String
 ) {
+    val context = LocalContext.current
     val viewModel: PosterViewModel = viewModel(
         key = "PosterViewModel_$code",
-        factory = PosterViewModel.Factory(code)
+        factory = PosterViewModel.Factory(code, context)
     )
 
-    val posters = viewModel.pager.collectAsLazyPagingItems()
+    val pagerFlow = viewModel.pager.collectAsStateWithLifecycle().value
+    val posters = pagerFlow?.collectAsLazyPagingItems()
+
+//    val posters = viewModel.pager.collectAsLazyPagingItems()
 
     LaunchedEffect(refreshTrigger) {
-        posters.refresh() // 👈 refresh paging data when triggered
+        posters?.refresh() // 👈 refresh paging data when triggered
     }
 
-    if (posters.itemCount == 0 && posters.loadState.refresh is LoadState.Loading) {
+//    if (posters.itemCount == 0 && posters.loadState.refresh is LoadState.Loading) {
+    if (posters == null) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()

@@ -32,6 +32,23 @@ class AuthRepository(
             if (resp.isSuccessful && resp.body() != null) {
                 val b = resp.body()!!
                 store.save(b.access_token, b.refresh_token)
+                // after: store.save(b.access_token, b.refresh_token)
+                try {
+                    val me = authedApi.me()  // GET me.php
+                    if (me.isSuccessful && me.body() != null) {
+                        val map = me.body()!!
+                        // typical keys you might return from PHP: "user_id" or "id"
+                        val uid = (map["user_id"] ?: map["id"])?.toString()?.toDouble()?.toInt() ?: 0
+                        if (uid > 0) {
+                            // persist so ViewContent can read it
+                            context.getSharedPreferences("auth_prefs", Context.MODE_PRIVATE)
+                                .edit()
+                                .putInt("user_id", uid)
+                                .apply()
+                        }
+                    }
+                } catch (_: Throwable) { /* non-fatal: we can retry later */ }
+
                 Result.success(Unit)
             } else {
                 Result.failure(Exception(extractError(resp.code(), resp.errorBody()?.string())))
@@ -223,10 +240,10 @@ class AuthRepository(
         }
     }
 
-//    fun getUserId(context: Context): Int {
-//        val prefs = context.getSharedPreferences("auth_prefs", Context.MODE_PRIVATE)
-//        return prefs.getInt("user_id", 0) // 0 = not logged in / missing
-//    }
+    fun getUserId(context: Context): Int {
+        val prefs = context.getSharedPreferences("auth_prefs", Context.MODE_PRIVATE)
+        return prefs.getInt("user_id", 0) // 0 = not logged in / missing
+    }
 
     suspend fun updateUsername(userId: Int, username: String): Result<Unit> {
         return try {
