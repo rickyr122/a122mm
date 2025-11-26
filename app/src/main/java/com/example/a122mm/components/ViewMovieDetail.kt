@@ -194,6 +194,8 @@ interface MovieApiService {
     @POST("addratemovie")
     suspend fun rateMovie(
         @Field("mId") mId: String,
+        @Field("client_time") clientTime: String,
+        @Field("user_id") userId: Int,
         @Field("rating") rating: Int
     ): retrofit2.Response<Unit>
 
@@ -461,6 +463,9 @@ fun MovieDetailContent(
             trailerLoading = false
         }
     }
+
+    val clientTime = LocalDateTime.now()
+        .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
 
     Box(
         modifier = Modifier
@@ -826,8 +831,8 @@ fun MovieDetailContent(
                                     scope.launch(Dispatchers.IO) {
                                         try {
                                             val isCurrentlyInList = movieInList == "1"
-                                            val clientTime = LocalDateTime.now()
-                                                .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+//                                            val clientTime = LocalDateTime.now()
+//                                                .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
                                             val newValue = if (isCurrentlyInList) "0" else "1"
                                             val response = if (isCurrentlyInList)
                                                                 api.removeFromMyList(sId, userId)
@@ -869,7 +874,7 @@ fun MovieDetailContent(
                                     //Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                                     scope.launch(Dispatchers.IO) {
                                         try {
-                                            api.rateMovie(sId, newRating)
+                                            api.rateMovie(sId, clientTime, userId, newRating)
                                             withContext(Dispatchers.Main) { onUserChanged() }   // <—
                                         } catch (e: Exception) { Log.e("Rate", "Error rating", e) }
                                     }
@@ -890,7 +895,7 @@ fun MovieDetailContent(
                                     // I Like This
                                     scope.launch(Dispatchers.IO) {
                                         try {
-                                            api.rateMovie(sId, newRating)
+                                            api.rateMovie(sId, clientTime, userId, newRating)
                                             withContext(Dispatchers.Main) { onUserChanged() }   // <—
                                         } catch (e: Exception) { Log.e("Rate", "Error rating 5", e) }
                                     }
@@ -912,7 +917,7 @@ fun MovieDetailContent(
                                     // Love This
                                     scope.launch(Dispatchers.IO) {
                                         try {
-                                            api.rateMovie(sId, newRating)
+                                            api.rateMovie(sId, clientTime, userId, newRating)
                                             withContext(Dispatchers.Main) { onUserChanged() }   // <—
                                         } catch (e: Exception) { Log.e("Rate", "Error rating 10", e) }
                                     }

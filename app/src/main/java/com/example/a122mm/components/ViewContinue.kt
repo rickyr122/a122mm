@@ -56,6 +56,7 @@ import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -68,7 +69,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.example.a122mm.R
+import com.example.a122mm.auth.AuthRepository
+import com.example.a122mm.auth.TokenStore
 import com.example.a122mm.dataclass.ApiClient
+import com.example.a122mm.dataclass.AuthNetwork
 import com.example.a122mm.helper.fixEncoding
 import com.google.accompanist.systemuicontroller.rememberSystemUiController
 import kotlinx.coroutines.delay
@@ -78,6 +82,8 @@ import retrofit2.http.FormUrlEncoded
 import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Query
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 
 data class ContinueWatchingResponseContent(
     val mId: String,
@@ -106,6 +112,8 @@ interface ApiServiceContent2 {
     @POST("addratemovie")
     suspend fun rateMovie(
         @Field("mId") mId: String,
+        @Field("client_time") clientTime: String,
+        @Field("user_id") userId: Int,
         @Field("rating") rating: Int
     ): retrofit2.Response<Unit>
 }
@@ -118,6 +126,7 @@ data class RatingOption(
     val icon: Int,         // drawable resource id
     val filledIcon: Int    // drawable when selected
 )
+
 
 class PosterViewModel2 : ViewModel() {
     private val apiService = ApiClient.create(ApiServiceContent2::class.java)
@@ -165,10 +174,11 @@ class PosterViewModel2 : ViewModel() {
         }
     }
 
-    fun rateMovie(mId: String, rating: Int, type: String, onComplete: () -> Unit = {}) {
+
+    fun rateMovie(mId: String, cTime:String, userId: Int ,rating: Int, type: String, onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             try {
-                val response = apiService.rateMovie(mId, rating)
+                val response = apiService.rateMovie(mId, cTime, userId, rating)
                 if (response.isSuccessful) {
                     // Refresh posters so the updated hasRated value comes in
                     fetchPosters(type)
@@ -201,6 +211,18 @@ fun ViewContinue(
         viewModel.fetchPosters(type) // this will re-fetch the list every time refreshTrigger toggles
     }
 
+    val context = LocalContext.current
+
+    val repo = remember {
+        AuthRepository(
+            publicApi = AuthNetwork.publicAuthApi,
+            authedApi = AuthNetwork.authedAuthApi(context),
+            store = TokenStore(context)
+        )
+    }
+    val userId = remember { repo.getUserId(context) }
+    val clientTime = LocalDateTime.now()
+        .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
 
     if (posters.isEmpty()) {
         Box(
@@ -234,7 +256,6 @@ fun ViewContinue(
             darkIcons = false // IMPORTANT: darkIcons must be false to force black nav bar on Android 12+
         )
     }
-
 
     SideEffect {
         systemUiController.setNavigationBarColor(Color.Black)
@@ -484,7 +505,7 @@ fun ViewContinue(
                             val newRating = if (isSelected) 0 else option.value
                             localHasRated = newRating
 
-                            viewModel.rateMovie(poster.mId, newRating, type) {
+                            viewModel.rateMovie(poster.mId, clientTime, userId, newRating, type) {
                                 coroutineScope.launch {
                                     delay(1000)
                                     sheetState.hide()
