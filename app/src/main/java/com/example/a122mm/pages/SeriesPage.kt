@@ -9,17 +9,22 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.example.a122mm.auth.AuthRepository
+import com.example.a122mm.auth.TokenStore
 import com.example.a122mm.components.PosterViewModel2
 import com.example.a122mm.components.ViewBanner
 import com.example.a122mm.components.ViewContent
 import com.example.a122mm.components.ViewContinue
 import com.example.a122mm.components.ViewTopContent
+import com.example.a122mm.dataclass.AuthNetwork
 import com.example.a122mm.dataclass.Section
 import com.example.a122mm.dataclass.SeriesViewModel
 
@@ -37,6 +42,17 @@ fun SeriesPage(
     // Continue Watching VM + state
     val continueVM: PosterViewModel2 = viewModel()
     val posters by continueVM.posters2
+
+    val context = LocalContext.current
+
+    val repo = remember {
+        AuthRepository(
+            publicApi = AuthNetwork.publicAuthApi,
+            authedApi = AuthNetwork.authedAuthApi(context),
+            store = TokenStore(context)
+        )
+    }
+    val userId = remember { repo.getUserId(context) }
 
     Column(
         modifier = modifier.fillMaxSize()
@@ -61,7 +77,7 @@ fun SeriesPage(
 
             // Fetch/refresh Continue Watching whenever type or refreshTrigger changes
             LaunchedEffect(type, refreshTrigger.value) {
-                continueVM.fetchPosters(type)
+                continueVM.fetchPosters(type, userId)
             }
 
             allSections.forEach { section ->

@@ -57,6 +57,7 @@ fun HomePage(
             store = TokenStore(context)
         )
     }
+    val userId = remember { repo.getUserId(context) }
 
     LaunchedEffect(Unit) {
         val did = getDeviceId(context)
@@ -94,7 +95,7 @@ fun HomePage(
 
             // Fetch/refresh Continue Watching whenever type or refreshTrigger changes
             LaunchedEffect(type, refreshTrigger.value) {
-                continueVM.fetchPosters(type)
+                continueVM.fetchPosters(type, userId)
             }
 
             allSections.forEach { section ->

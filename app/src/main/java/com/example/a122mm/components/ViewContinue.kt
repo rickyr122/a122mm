@@ -99,7 +99,8 @@ data class ContinueWatchingResponseContent(
 interface ApiServiceContent2 {
     @GET("getcontinuewatching")
     suspend fun getContinueWatching(
-        @Query("type") type: String
+        @Query("type") type: String,
+        @Query("user_id") userId: Int
     ): List<ContinueWatchingResponseContent>
 
     @FormUrlEncoded
@@ -137,11 +138,11 @@ class PosterViewModel2 : ViewModel() {
     private val _posters2 = mutableStateOf<List<ContinueWatchingResponseContent>>(emptyList())
     val posters2: State<List<ContinueWatchingResponseContent>> = _posters2
 
-    init {
-        fetchPosters("HOM")
-    }
+//    init {
+//        fetchPosters("HOM", 1)
+//    }
     //rating: Int,
-    fun removeItemFromContinue(mId: String,  type: String, onComplete: () -> Unit = {}) {
+    fun removeItemFromContinue(mId: String,  type: String, userId: Int, onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             try {
                 val result = apiService.removecontinue(mId)
@@ -151,7 +152,7 @@ class PosterViewModel2 : ViewModel() {
 //                    onComplete()
 
                     // ✅ Reload from server instead of modifying list manually
-                    fetchPosters(type) // your function to refresh the list
+                    fetchPosters(type, userId) // your function to refresh the list
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -161,11 +162,11 @@ class PosterViewModel2 : ViewModel() {
         }
     }
 
-    fun fetchPosters(type: String) {
+    fun fetchPosters(type: String, userId: Int) {
         viewModelScope.launch {
             try {
 //                posters2 = apiService.getContinueWatching()
-                _posters2.value = apiService.getContinueWatching(type) // 👈 HERE
+                _posters2.value = apiService.getContinueWatching(type, userId) // 👈 HERE
             } catch (e: Exception) {
 //                posters2 = emptyList()
                 _posters2.value = emptyList()
@@ -181,7 +182,7 @@ class PosterViewModel2 : ViewModel() {
                 val response = apiService.rateMovie(mId, cTime, userId, rating)
                 if (response.isSuccessful) {
                     // Refresh posters so the updated hasRated value comes in
-                    fetchPosters(type)
+                    fetchPosters(type, userId)
                 } else {
                     Log.e("RATE", "Failed: ${response.code()} ${response.message()}")
                 }
@@ -205,12 +206,6 @@ fun ViewContinue(
     viewModel: PosterViewModel2 = viewModel(),
     type: String
 ) {
-    val posters by viewModel.posters2
-
-    LaunchedEffect(refreshTrigger, type) {
-        viewModel.fetchPosters(type) // this will re-fetch the list every time refreshTrigger toggles
-    }
-
     val context = LocalContext.current
 
     val repo = remember {
@@ -223,6 +218,18 @@ fun ViewContinue(
     val userId = remember { repo.getUserId(context) }
     val clientTime = LocalDateTime.now()
         .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+
+    val posters by viewModel.posters2
+
+    LaunchedEffect(Unit) {
+        viewModel.fetchPosters(type, userId)
+    }
+
+    LaunchedEffect(refreshTrigger, type) {
+        viewModel.fetchPosters(type, userId) // this will re-fetch the list every time refreshTrigger toggles
+    }
+
+
 
     if (posters.isEmpty()) {
         Box(
@@ -521,7 +528,7 @@ fun ViewContinue(
                     icon = painterResource(id = R.drawable.ic_cancel)
                 ) {
                     selectedPoster?.let { poster ->
-                        viewModel.removeItemFromContinue(poster.mId, type) {
+                        viewModel.removeItemFromContinue(poster.mId, type, userId) {
                             coroutineScope.launch {
                                 sheetState.hide()
                                 onRefreshTriggered()

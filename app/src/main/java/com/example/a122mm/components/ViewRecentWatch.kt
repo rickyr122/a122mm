@@ -58,7 +58,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.example.a122mm.R
+import com.example.a122mm.auth.AuthRepository
+import com.example.a122mm.auth.TokenStore
 import com.example.a122mm.dataclass.ApiClient
+import com.example.a122mm.dataclass.AuthNetwork
 import com.example.a122mm.helper.fixEncoding
 import kotlinx.coroutines.launch
 import retrofit2.Response
@@ -66,6 +69,7 @@ import retrofit2.http.Field
 import retrofit2.http.FormUrlEncoded
 import retrofit2.http.GET
 import retrofit2.http.POST
+import retrofit2.http.Query
 
 // API response model
 data class RecentWatchResponse(
@@ -82,7 +86,9 @@ data class RecentWatchResponse(
 // API Service
 interface ApiServiceRecent {
     @GET("getrecentwatch")
-    suspend fun getRecentWatch(): List<RecentWatchResponse>
+    suspend fun getRecentWatch(
+        @Query("user_id") userId: Int
+    ): List<RecentWatchResponse>
 
     @FormUrlEncoded
     @POST("addwatchexclude")
@@ -98,14 +104,14 @@ class RecentWatchViewModel : ViewModel() {
     private val _items = mutableStateOf<List<RecentWatchResponse>>(emptyList())
     val items: State<List<RecentWatchResponse>> = _items
 
-    init {
-        fetchItems()
-    }
+//    init {
+//        fetchItems(userId)
+//    }
 
-    fun fetchItems() {
+    fun fetchItems(userId: Int) {
         viewModelScope.launch {
             try {
-                _items.value = apiService.getRecentWatch()
+                _items.value = apiService.getRecentWatch(userId)
             } catch (e: Exception) {
                 e.printStackTrace()
                 _items.value = emptyList()
@@ -121,12 +127,12 @@ class RecentWatchViewModel : ViewModel() {
 //        }
 //    }
 
-    fun addWatchExclude(mId: String, onDone: () -> Unit = {}) {
+    fun addWatchExclude(mId: String, userId: Int, onDone: () -> Unit = {}) {
         viewModelScope.launch {
             try {
                 apiService.addWatchExclude(mId)   // fire & forget, like addToMyList
             } catch (_: Exception) { /* you can log here */ }
-            fetchItems()                           // refresh the row
+            fetchItems(userId)                           // refresh the row
             onDone()
         }
     }
@@ -147,9 +153,21 @@ fun ViewRecentWatch(
 ) {
     val items by viewModel.items
     val context = LocalContext.current
+    val repo = remember {
+        AuthRepository(
+            publicApi = AuthNetwork.publicAuthApi,
+            authedApi = AuthNetwork.authedAuthApi(context),
+            store = TokenStore(context)
+        )
+    }
+    val userId = remember { repo.getUserId(context) }
+
+    LaunchedEffect(Unit) {
+        viewModel.fetchItems(userId)
+    }
 
     LaunchedEffect(refreshTrigger) {
-        viewModel.fetchItems()
+        viewModel.fetchItems(userId)
     }
 
     @OptIn(ExperimentalMaterial3Api::class)
@@ -352,7 +370,7 @@ fun ViewRecentWatch(
                     icon = painterResource(id = R.drawable.ic_cancel)
                 ) {
                     selectedItem?.let { sel ->
-                        viewModel.addWatchExclude(sel.mId) {
+                        viewModel.addWatchExclude(sel.mId, userId) {
                             Toast.makeText(context, "Hidden from watch history", Toast.LENGTH_SHORT).show()
                             scope.launch { sheetState.hide() }
                             onRefreshTriggered()

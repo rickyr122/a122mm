@@ -126,7 +126,10 @@ import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
+import com.example.a122mm.auth.AuthRepository
+import com.example.a122mm.auth.TokenStore
 import com.example.a122mm.dataclass.ApiClient
+import com.example.a122mm.dataclass.AuthNetwork
 import com.example.a122mm.helper.CustomSlider
 import com.example.a122mm.helper.encodeUrlSegmentsStrict
 import com.example.a122mm.helper.fixEncoding
@@ -205,7 +208,8 @@ interface ApiContinueWatching {
         @Field("cPercent") cPercent: Double,
         @Field("cPosition") cPosition: Double,
         @Field("client_time") clientTime: String,
-        @Field("state") state: String = "u"
+        @Field("state") state: String = "u",
+        @Field("user_id") userId: Int
     ): String
 
     @FormUrlEncoded
@@ -214,7 +218,8 @@ interface ApiContinueWatching {
         @Field("mId") mId: String,
         @Field("cId") cId: String,
         @Field("client_time") clientTime: String,
-        @Field("state") state: String = "d"
+        @Field("state") state: String = "d",
+        @Field("user_id") userId: Int
     ): String
 }
 
@@ -495,6 +500,15 @@ fun MainPlayerScreen(
         return now.format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
     }
 
+    val repo = remember {
+        AuthRepository(
+            publicApi = AuthNetwork.publicAuthApi,
+            authedApi = AuthNetwork.authedAuthApi(context),
+            store = TokenStore(context)
+        )
+    }
+    val userId = remember { repo.getUserId(context) }
+
     // Decide IDs:
     // mId = vData!!.mId  (MOV-... or TVG-...)
     // cId = if episode -> currentCode (TVS-...), else movie -> vData!!.mId
@@ -530,7 +544,8 @@ fun MainPlayerScreen(
                     cPercent = pct,
                     cPosition = pos,
                     clientTime = ts,
-                    state = "u"
+                    state = "u",
+                    userId = userId
                 )
             } catch (e: Exception) {
                 Log.e("CW", "upsert failed: ${e.message}")
@@ -548,7 +563,8 @@ fun MainPlayerScreen(
                     mId = mid,
                     cId = cid,
                     clientTime = ts,
-                    state = "d"
+                    state = "d",
+                    userId = userId
                 )
             } catch (e: Exception) {
                 Log.e("CW", "delete failed: ${e.message}")
