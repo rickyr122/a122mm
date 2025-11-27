@@ -175,6 +175,28 @@ class PosterViewModel(
         }
     }
 
+    fun refreshTitle() {
+        viewModelScope.launch {
+            val uid = _userId.value
+            if (uid == 0) return@launch
+
+            runCatching {
+                apiService.getHomeMenu(
+                    code = code,
+                    page = 1,
+                    pageSize = 1,
+                    userId = uid
+                )
+            }.onSuccess { res ->
+                _title.value = res.title
+            }.onFailure { e ->
+                Log.e("HomeMenuDebug", "refreshTitle failed", e)
+                // Jangan paksa "Unknown" lagi di sini, biarkan title lama kalau ada
+            }
+        }
+    }
+
+
     class Factory(
         private val code: Int,
         private val appContext: Context
@@ -209,16 +231,23 @@ fun ViewContent(
    // val items = pagerFlow?.collectAsLazyPagingItems()
 
     if (posters == null) {
-        // Pager not ready yet → don't render this section at all
+        onHasData(false)
         return
     }
 
     LaunchedEffect(refreshTrigger) {
+        viewModel.refreshTitle()
         posters.refresh() // refresh paging data when triggered
     }
 
     val refreshState = posters.loadState.refresh
     val isEmpty = posters.itemCount == 0
+
+
+//    if (isEmpty == true && (refreshState is LoadState.NotLoading || refreshState is LoadState.Error)) {
+//        // no data for this category -> don't render title/LazyRow at all
+//        return
+//    }
 
     when {
         // First load still running and we have no items yet

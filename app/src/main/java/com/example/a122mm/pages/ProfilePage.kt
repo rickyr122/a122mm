@@ -63,6 +63,8 @@ fun ProfilePage(
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 onDominantColorExtracted(Color.Black)
+
+                viewModel.triggerRefresh()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -137,7 +139,11 @@ fun ProfilePage(
             }
         )
         val refreshTrigger = viewModel.refreshTrigger.collectAsState()
-        var hasAnyRealData by remember(refreshTrigger.value) { mutableStateOf(false) }
+        //var hasAnyRealData by remember(refreshTrigger.value) { mutableStateOf(false) }
+
+        var hasContinue by remember(refreshTrigger.value) { mutableStateOf(false) }
+        var hasCategory by remember(refreshTrigger.value) { mutableStateOf(false) }
+        var hasRecent by remember(refreshTrigger.value) { mutableStateOf(false) }
 
         // 1) While loading: show spinner (but still compose sections below)
         if (isLoading) {
@@ -159,7 +165,7 @@ fun ProfilePage(
                     currentTabIndex = 3,
                     type = type,
                     onHasData = { has ->
-                        if (has) hasAnyRealData = true
+                        hasContinue = has
                     }
                 )
                 is ProfileSection.Category -> ViewContent(
@@ -171,7 +177,7 @@ fun ProfilePage(
                     currentTabIndex = 3,
                     type = type,
                     onHasData = { has ->
-                        if (has) hasAnyRealData = true
+                        hasCategory = has
                     }
                 )
                 is ProfileSection.RecentWatch -> ViewRecentWatch(
@@ -182,14 +188,14 @@ fun ProfilePage(
                     currentTabIndex = 3,
                     type = type,
                     onHasData = { has ->
-                        if (has) hasAnyRealData = true
+                        hasRecent = has
                     }
                 )
             }
         }
 
 // 3) When NOT loading and NO section reported any data → show fallback card
-        if (!isLoading && !hasAnyRealData) {
+        if (!isLoading && !hasContinue && !hasCategory && !hasRecent) {
             DownloadsForYouEmptyCard(
                 modifier = Modifier
                     .padding(horizontal = 16.dp, vertical = 24.dp)
