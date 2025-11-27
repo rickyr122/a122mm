@@ -7,6 +7,7 @@ import com.example.a122mm.auth.SessionManager.broadcastLogout
 import com.example.a122mm.auth.TokenStore
 import com.example.a122mm.components.ApiService
 import com.example.a122mm.components.MovieApiService
+import com.example.a122mm.pages.ApiServiceTopPick
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import retrofit2.Retrofit
@@ -45,6 +46,10 @@ object NetworkModule {
 
     val mApiService: MovieApiService by lazy {
         retrofit.create(MovieApiService::class.java)
+    }
+
+    val topPickApi: ApiServiceTopPick by lazy {
+        retrofit.create(ApiServiceTopPick::class.java)
     }
 }
 
