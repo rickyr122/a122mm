@@ -29,7 +29,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
@@ -204,7 +203,8 @@ fun ViewContinue(
     onRefreshTriggered: () -> Unit,
     currentTabIndex: Int,
     viewModel: PosterViewModel2 = viewModel(),
-    type: String
+    type: String,
+    onHasData: (Boolean) -> Unit = {}
 ) {
     val context = LocalContext.current
 
@@ -230,21 +230,28 @@ fun ViewContinue(
     }
 
 
-
     if (posters.isEmpty()) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(16f / 9f),
-            contentAlignment = Alignment.Center
-        ) {
-            CircularProgressIndicator(
-                color = Color.White.copy(alpha = 0.8f),
-                strokeWidth = 4.dp
-            )
-        }
+        onHasData(false)
         return
+    } else {
+        onHasData(true)
     }
+
+
+//    if (posters.isEmpty()) {
+//        Box(
+//            modifier = Modifier
+//                .fillMaxWidth()
+//                .aspectRatio(16f / 9f),
+//            contentAlignment = Alignment.Center
+//        ) {
+//            CircularProgressIndicator(
+//                color = Color.White.copy(alpha = 0.8f),
+//                strokeWidth = 4.dp
+//            )
+//        }
+//        return
+//    }
 
     val configuration = LocalConfiguration.current
     val isTablet = configuration.screenWidthDp >= 600

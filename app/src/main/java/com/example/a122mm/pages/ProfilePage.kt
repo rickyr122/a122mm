@@ -6,11 +6,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -116,8 +120,6 @@ fun ProfilePage(
         }
     }
 
-
-
     Column (
         modifier = modifier // ✅ use the passed-in modifier
             .fillMaxSize()
@@ -134,45 +136,90 @@ fun ProfilePage(
                 }
             }
         )
+        val refreshTrigger = viewModel.refreshTrigger.collectAsState()
+        var hasAnyRealData by remember(refreshTrigger.value) { mutableStateOf(false) }
 
+        // 1) While loading: show spinner (but still compose sections below)
         if (isLoading) {
             CircularProgressIndicator(
                 modifier = Modifier
                     .padding(32.dp)
                     .align(Alignment.CenterHorizontally)
             )
-        } else {
-            val refreshTrigger = viewModel.refreshTrigger.collectAsState()
-            allSections.forEach { section ->
-                when (section) {
-                    is ProfileSection.Continue -> ViewContinue(
-                        modifier,
-                        navController,
-                        refreshTrigger = refreshTrigger.value,
-                        onRefreshTriggered = { viewModel.triggerRefresh() },
-                        currentTabIndex = 3,
-                        type = type
-                    )
-                    is ProfileSection.Category -> ViewContent(
-                        modifier,
-                        section.code,
-                        navController,
-                        refreshTrigger = refreshTrigger.value,
-                        onRefreshTriggered = { viewModel.triggerRefresh() },
-                        currentTabIndex = 3,
-                        type = type
-                    )
-                    is ProfileSection.RecentWatch -> ViewRecentWatch(
-                        modifier,
-                        navController,
-                        refreshTrigger = refreshTrigger.value,
-                        onRefreshTriggered = { viewModel.triggerRefresh() },
-                        currentTabIndex = 3,
-                        type = type
-                    )
-                }
-            }
-
         }
+
+// 2) Always render sections so they can report hasData = true/false
+        allSections.forEach { section ->
+            when (section) {
+                is ProfileSection.Continue -> ViewContinue(
+                    modifier,
+                    navController,
+                    refreshTrigger = refreshTrigger.value,
+                    onRefreshTriggered = { viewModel.triggerRefresh() },
+                    currentTabIndex = 3,
+                    type = type,
+                    onHasData = { has ->
+                        if (has) hasAnyRealData = true
+                    }
+                )
+                is ProfileSection.Category -> ViewContent(
+                    modifier,
+                    section.code,
+                    navController,
+                    refreshTrigger = refreshTrigger.value,
+                    onRefreshTriggered = { viewModel.triggerRefresh() },
+                    currentTabIndex = 3,
+                    type = type,
+                    onHasData = { has ->
+                        if (has) hasAnyRealData = true
+                    }
+                )
+                is ProfileSection.RecentWatch -> ViewRecentWatch(
+                    modifier,
+                    navController,
+                    refreshTrigger = refreshTrigger.value,
+                    onRefreshTriggered = { viewModel.triggerRefresh() },
+                    currentTabIndex = 3,
+                    type = type,
+                    onHasData = { has ->
+                        if (has) hasAnyRealData = true
+                    }
+                )
+            }
+        }
+
+// 3) When NOT loading and NO section reported any data → show fallback card
+        if (!isLoading && !hasAnyRealData) {
+            DownloadsForYouEmptyCard(
+                modifier = Modifier
+                    .padding(horizontal = 16.dp, vertical = 24.dp)
+                    .align(Alignment.CenterHorizontally)
+            )
+        }
+
+    }
+}
+
+@Composable
+fun DownloadsForYouEmptyCard(modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(24.dp)
+            .background(Color(0xFF111111)),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = "Turn on Downloads for You",
+            color = Color.White,
+            // use your own typography
+        )
+        Text(
+            text = "We’ll download movies and shows just for you, so you’ll always have something to watch.",
+            color = Color.Gray,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+
+        // buttons “Set Up” & “Find More to Download” can go here
     }
 }

@@ -25,7 +25,6 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
@@ -149,7 +148,8 @@ fun ViewRecentWatch(
     onRefreshTriggered: () -> Unit,
     currentTabIndex: Int,
     viewModel: RecentWatchViewModel = viewModel(),
-    type: String
+    type: String,
+    onHasData: (Boolean) -> Unit = {}
 ) {
     val items by viewModel.items
     val context = LocalContext.current
@@ -170,6 +170,15 @@ fun ViewRecentWatch(
         viewModel.fetchItems(userId)
     }
 
+    if (items.isEmpty()) {
+        onHasData(false)
+        return
+    } else {
+        onHasData(true)
+    }
+
+
+
     @OptIn(ExperimentalMaterial3Api::class)
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
@@ -178,20 +187,20 @@ fun ViewRecentWatch(
     val configuration = LocalConfiguration.current
     val isTablet = configuration.screenWidthDp >= 600
 
-    if (items.isEmpty()) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(16f / 9f),
-            contentAlignment = Alignment.Center
-        ) {
-            CircularProgressIndicator(
-                color = Color.White.copy(alpha = 0.8f),
-                strokeWidth = 4.dp
-            )
-        }
-        return
-    }
+//    if (items.isEmpty()) {
+//        Box(
+//            modifier = Modifier
+//                .fillMaxWidth()
+//                .aspectRatio(16f / 9f),
+//            contentAlignment = Alignment.Center
+//        ) {
+//            CircularProgressIndicator(
+//                color = Color.White.copy(alpha = 0.8f),
+//                strokeWidth = 4.dp
+//            )
+//        }
+//        return
+//    }
 
     Spacer(modifier = Modifier.height(24.dp))
 

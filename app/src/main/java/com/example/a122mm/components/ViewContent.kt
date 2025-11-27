@@ -5,12 +5,9 @@ import android.graphics.pdf.LoadParams
 import android.util.Log
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -25,7 +22,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -190,8 +186,6 @@ class PosterViewModel(
     }
 }
 
-
-
 @Composable
 fun ViewContent(
     modifier: Modifier = Modifier,
@@ -200,7 +194,8 @@ fun ViewContent(
     refreshTrigger: Int,
     onRefreshTriggered: () -> Unit,
     currentTabIndex: Int,
-    type: String
+    type: String,
+    onHasData: (Boolean) -> Unit = {}
 ) {
     val context = LocalContext.current
     val viewModel: PosterViewModel = viewModel(
@@ -211,27 +206,57 @@ fun ViewContent(
     val pagerFlow = viewModel.pager.collectAsStateWithLifecycle().value
     val posters = pagerFlow?.collectAsLazyPagingItems()
 
-//    val posters = viewModel.pager.collectAsLazyPagingItems()
+   // val items = pagerFlow?.collectAsLazyPagingItems()
 
-    LaunchedEffect(refreshTrigger) {
-        posters?.refresh() // 👈 refresh paging data when triggered
-    }
-
-//    if (posters.itemCount == 0 && posters.loadState.refresh is LoadState.Loading) {
     if (posters == null) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(16f / 9f),
-            contentAlignment = Alignment.Center
-        ) {
-            CircularProgressIndicator(
-                color = Color.White.copy(alpha = 0.8f),
-                strokeWidth = 4.dp
-            )
-        }
+        // Pager not ready yet → don't render this section at all
         return
     }
+
+    LaunchedEffect(refreshTrigger) {
+        posters.refresh() // refresh paging data when triggered
+    }
+
+    val refreshState = posters.loadState.refresh
+    val isEmpty = posters.itemCount == 0
+
+    when {
+        // First load still running and we have no items yet
+        isEmpty && refreshState is LoadState.Loading -> {
+            onHasData(false)
+            // You can choose to draw a small inline loader here or just return.
+            return
+        }
+
+        // Load finished (or errored) and still no items -> this section is empty
+        isEmpty && (refreshState is LoadState.NotLoading || refreshState is LoadState.Error) -> {
+            onHasData(false)
+            return
+        }
+
+        // We have at least one item
+        else -> {
+            onHasData(true)
+        }
+    }
+
+
+
+//    if (posters.itemCount == 0 && posters.loadState.refresh is LoadState.Loading) {
+//    if (posters == null) {
+//        Box(
+//            modifier = Modifier
+//                .fillMaxWidth()
+//                .aspectRatio(16f / 9f),
+//            contentAlignment = Alignment.Center
+//        ) {
+//            CircularProgressIndicator(
+//                color = Color.White.copy(alpha = 0.8f),
+//                strokeWidth = 4.dp
+//            )
+//        }
+//        return
+//    }
 
     Spacer(modifier = Modifier.height(24.dp))
 
