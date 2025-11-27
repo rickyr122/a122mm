@@ -152,7 +152,10 @@ data class MovieDetail(
 // --- Retrofit interface
 interface MovieApiService {
     @GET("getmoviedetail")
-    suspend fun getMovie(@Query("code") code: String): MovieDetail
+    suspend fun getMovie(
+        @Query("code") code: String,
+        @Query("user_id") userId: Int
+    ): MovieDetail
 
     @GET("gettvepisodes")
     suspend fun getEpisodes(
@@ -212,13 +215,22 @@ fun ViewMovieDetail(
     var error by remember { mutableStateOf<String?>(null) }
 
     val api = mApiService
+    val context = LocalContext.current
+    val repo = remember {
+        AuthRepository(
+            publicApi = AuthNetwork.publicAuthApi,
+            authedApi = AuthNetwork.authedAuthApi(context),
+            store = TokenStore(context)
+        )
+    }
+    val userId = remember { repo.getUserId(context) }
 
     // Prevent multiple navigations if recomposed while error is set
     var errorNavigated by remember { mutableStateOf(false) }
 
-    LaunchedEffect(movieId) {
+    LaunchedEffect(movieId, userId) {
         try {
-            movie = api.getMovie(movieId)
+            movie = api.getMovie(movieId, userId)
         } catch (e: Exception) {
             error = e.message ?: "Load failed"
             if (!errorNavigated) {
@@ -273,9 +285,9 @@ fun ViewMovieDetail(
     }
 
 
-    LaunchedEffect(movieId) {
+    LaunchedEffect(movieId, userId) {
         try {
-            movie = api.getMovie(movieId)
+            movie = api.getMovie(movieId, userId)
         } catch (e: Exception) {
             error = e.message
         }
