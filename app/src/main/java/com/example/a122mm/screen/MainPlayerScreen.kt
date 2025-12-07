@@ -145,6 +145,7 @@ import retrofit2.http.FormUrlEncoded
 import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Query
+import androidx.media3.common.Format
 import kotlin.math.floor
 import kotlin.math.roundToInt
 
@@ -262,7 +263,7 @@ fun MainPlayerScreen(
 
     var manualSubtitleChange by remember { mutableStateOf(false) }
     var subtitleAvailable by remember { mutableStateOf(false) }
-
+    //var hasExternalSrt by remember { mutableStateOf(false) }
 
     // ──────────────────────────
     // Fetch video details by code
@@ -348,15 +349,15 @@ fun MainPlayerScreen(
     val crStartSec = vData!!.crTime
 
     val externalSubUrl = subtitleUrl.trim()
-    val hasExternalSrt = externalSubUrl.isNotEmpty()
+    var hasExternalSrt by remember { mutableStateOf(false) }
 
-    LaunchedEffect(subtitleUrl) {
-        subtitleAvailable = false
+    LaunchedEffect(externalSubUrl) {
+        hasExternalSrt = false
 
-        if (!subtitleUrl.isNullOrBlank()) {
-            subtitleAvailable = withContext(Dispatchers.IO) {
+        if (externalSubUrl.isNotEmpty()) {
+            val exists = withContext(Dispatchers.IO) {
                 try {
-                    val url = java.net.URL(getCFlareUrl(subtitleUrl))
+                    val url = java.net.URL(getCFlareUrl(externalSubUrl))
                     (url.openConnection() as java.net.HttpURLConnection).run {
                         requestMethod = "HEAD"
                         connectTimeout = 3000
@@ -369,27 +370,55 @@ fun MainPlayerScreen(
                     false
                 }
             }
+
+            hasExternalSrt = exists
         }
     }
 
+
+
     // TrackSelector respects your external SRT rule
-    val trackSelector = remember(hasExternalSrt) {
-        DefaultTrackSelector(context).apply {
-            setParameters(
-                buildUponParameters().apply {
-                    if (hasExternalSrt) {
-                        setSelectUndeterminedTextLanguage(false)
-                        setPreferredTextLanguage(null)
-                        setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-                    } else {
-                        setSelectUndeterminedTextLanguage(true)
-                        setPreferredTextLanguage(null)
-                        setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-                    }
-                }
-            )
-        }
+//    val trackSelector = remember(hasExternalSrt) {
+//        DefaultTrackSelector(context).apply {
+//            setParameters(
+//                buildUponParameters().apply {
+//                    if (hasExternalSrt) {
+//                        setSelectUndeterminedTextLanguage(false)
+//                        setPreferredTextLanguage(null)
+//                        setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+//                    } else {
+//                        setSelectUndeterminedTextLanguage(true)
+//                        setPreferredTextLanguage(null)
+//                        setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+//                    }
+//                }
+//            )
+//        }
+//    }
+
+    val trackSelector = remember {
+        DefaultTrackSelector(context)
     }
+
+    LaunchedEffect(hasExternalSrt) {
+        trackSelector.setParameters(
+            trackSelector.buildUponParameters().apply {
+                if (hasExternalSrt) {
+                    // External SRT present: don't auto-pick undetermined text,
+                    // we will force-select the external track.
+                    setSelectUndeterminedTextLanguage(false)
+                    setPreferredTextLanguage(null)
+                    setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                } else {
+                    // No external SRT: let ExoPlayer auto-pick embedded text if any.
+                    setSelectUndeterminedTextLanguage(true)
+                    setPreferredTextLanguage(null)
+                    setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                }
+            }
+        )
+    }
+
 
     val renderersFactory = remember {
         DefaultRenderersFactory(context)
@@ -405,7 +434,7 @@ fun MainPlayerScreen(
     }
 
     // Build ExoPlayer AFTER data is ready; re-build if URL/progress or SRT presence changes
-    val exoPlayer = remember(videoUrl, progress, hasExternalSrt) {
+    val exoPlayer = remember(videoUrl, progress) {
         ExoPlayer.Builder(context, renderersFactory)
             .setTrackSelector(trackSelector)
             .build().apply {
@@ -417,13 +446,12 @@ fun MainPlayerScreen(
                 val resolvedVideoUrl = encodeUrlSegmentsStrict(getCFlareUrl(videoUrl))
                 Log.d("MainPlayer", "Video URL -> $resolvedVideoUrl  (raw: $videoUrl)")
 
-//                val mediaItemBuilder = MediaItem.Builder()
-//                    .setUri(Uri.parse(getCFlareUrl(videoUrl)))
-
                 val mediaItemBuilder = MediaItem.Builder()
                     .setUri(Uri.parse(resolvedVideoUrl))
 
-                if (hasExternalSrt) {
+                // Attach external subtitle track if URL string exists.
+                // (HEAD result - hasExternalSrt - is only used for logic, not for building the track)
+                if (externalSubUrl.isNotEmpty()) {
                     val resolvedSubUrl = encodeUrlSegmentsStrict(getCFlareUrl(externalSubUrl))
                     Log.d("MainSubs", "Subs URL -> $resolvedSubUrl  (raw: $externalSubUrl)")
 
@@ -441,14 +469,6 @@ fun MainPlayerScreen(
 
                 val mediaItem = mediaItemBuilder.build()
                 setMediaItem(mediaItem, startMs)
-
-                if (hasExternalSrt) {
-                    trackSelectionParameters = trackSelectionParameters
-                        .buildUpon()
-                        .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-                        .clearOverridesOfType(C.TRACK_TYPE_TEXT)
-                        .build()
-                }
 
                 prepare()
                 playWhenReady = true
@@ -748,11 +768,12 @@ fun MainPlayerScreen(
 
     LaunchedEffect(currentCode) {
         manualSubtitleChange = false   // ✅ allow auto-default on every new episode
+        subtitleAvailable = false
     }
 
-    LaunchedEffect(currentCode, hasExternalSrt) {
-        pendingSubSelection = if (hasExternalSrt) SubtitleOption.INDONESIAN else SubtitleOption.ENGLISH
-    }
+//    LaunchedEffect(currentCode, hasExternalSrt) {
+//        pendingSubSelection = if (hasExternalSrt) SubtitleOption.INDONESIAN else SubtitleOption.ENGLISH
+//    }
 
 // restore brightness when this screen leaves
     DisposableEffect(Unit) {
@@ -776,18 +797,83 @@ fun MainPlayerScreen(
     exoPlayer.addListener(object : Player.Listener {
         override fun onTracksChanged(tracks: Tracks) {
 
-            if (manualSubtitleChange) return  // ✅ skip auto override
+            if (manualSubtitleChange) return
 
             val textGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_TEXT }
 
+            data class TextTrack(val gIdx: Int, val tIdx: Int)
+
+            // All supported text tracks (for selection)
+            val allTextTracks = buildList {
+                textGroups.forEachIndexed { gIdx, g ->
+                    for (i in 0 until g.length) {
+                        if (!g.isTrackSupported(i)) continue
+                        add(TextTrack(gIdx, i))
+                    }
+                }
+            }
+
+            // Only count SRT / tx3g / etc as "embedded subtitle"
+//            fun isSubtitleMime(mime: String?): Boolean {
+//                return mime == MimeTypes.APPLICATION_SUBRIP ||      // .srt
+//                        mime == "application/x-subrip" ||            // ffmpeg variant
+//                        mime == "text/utf8" ||                       // sometimes used
+//                        mime == "text/tx3g" ||                       // MP4 Timed Text
+//                        mime == "application/x-quicktime-tx3g" ||    // same, QuickTime style
+//                        mime == MimeTypes.APPLICATION_MP4VTT ||      // mp4 vtt
+//                        mime == MimeTypes.TEXT_VTT                   // .vtt
+//            }
+
+            // Only count MP4 timed text as embedded subtitles (your remuxed SRT)
+            fun isSubtitleMime(mime: String?): Boolean {
+                return mime == "text/tx3g" ||                       // MP4 Timed Text (mov_text)
+                        mime == "application/x-quicktime-tx3g"       // same, QuickTime flavor
+            }
+
+            val hasUsableText = textGroups.any { g ->
+                (0 until g.length).any { i ->
+                    val format = g.getTrackFormat(i)
+                    val supported = g.isTrackSupported(i)
+                    val mime = format.sampleMimeType
+                    supported && isSubtitleMime(mime)
+                }
+            }
+
+            // Tiny debug log so we see what Exo thinks
+            Log.d(
+                "SubDebug",
+                "hasExternalSrt=$hasExternalSrt, textGroups=${textGroups.size}, hasUsableText=$hasUsableText"
+            )
+
+
+            // ───────────────────────
+            // Rule 2b: no subs at all
+            // ───────────────────────
+            if (!hasExternalSrt && !hasUsableText) {
+                // No external AND no usable embedded → hide the icon
+                subtitleAvailable = false
+                pendingSubSelection = SubtitleOption.OFF
+
+                exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
+                    .buildUpon()
+                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                    .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                    .build()
+                return
+            }
+
+            // If we reach here, we have either a valid external SRT,
+            // or at least one usable embedded subtitle track.
+            subtitleAvailable = hasExternalSrt || hasUsableText
+
+            // ───────────── Case 1: external SRT exists ─────────────
             if (hasExternalSrt) {
                 for ((gIdx, g) in textGroups.withIndex()) {
                     for (i in 0 until g.length) {
                         if (!g.isTrackSupported(i)) continue
                         val f = g.getTrackFormat(i)
-                        val isSrt = f.sampleMimeType == MimeTypes.APPLICATION_SUBRIP
-                        val isOurExt = (f.id == "ext_srt") || (f.label == "External SRT")
-                        if (isSrt && isOurExt) {
+                        val isOurExt = f.id == "ext_srt" || f.label == "External SRT"
+                        if (isOurExt) {
                             val override = TrackSelectionOverride(g.mediaTrackGroup, listOf(i))
                             exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
                                 .buildUpon()
@@ -795,52 +881,32 @@ fun MainPlayerScreen(
                                 .clearOverridesOfType(C.TRACK_TYPE_TEXT)
                                 .addOverride(override)
                                 .build()
+
+                            pendingSubSelection = SubtitleOption.INDONESIAN
                             return
                         }
                     }
                 }
-                return
+                // If HEAD said true but track not found, fall through and treat as embedded-only.
             }
 
-            if (textGroups.isEmpty()) return
+            // ───────────── Case 2a: embedded subtitles only ─────────────
+            if (hasUsableText && allTextTracks.isNotEmpty()) {
+                val best = allTextTracks.first()
+                val group = textGroups[best.gIdx]
 
-            data class Candidate(val g: Int, val t: Int, val score: Int)
-            val candidates = buildList {
-                textGroups.forEachIndexed { gIdx, g ->
-                    for (i in 0 until g.length) {
-                        if (!g.isTrackSupported(i)) continue
-                        val f = g.getTrackFormat(i)
-                        val isText = f.sampleMimeType?.startsWith("text/") == true ||
-                                f.sampleMimeType == MimeTypes.TEXT_VTT ||
-                                f.sampleMimeType == MimeTypes.APPLICATION_SUBRIP ||
-                                f.sampleMimeType == MimeTypes.APPLICATION_MP4VTT ||
-                                f.sampleMimeType == MimeTypes.APPLICATION_TTML
-                        if (!isText) continue
+                val override = TrackSelectionOverride(group.mediaTrackGroup, listOf(best.tIdx))
+                exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
+                    .buildUpon()
+                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                    .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                    .addOverride(override)
+                    .build()
 
-                        val sel = f.selectionFlags
-                        val score = when {
-                            (sel and C.SELECTION_FLAG_DEFAULT) != 0 -> 3
-                            (sel and C.SELECTION_FLAG_FORCED)  != 0 -> 2
-                            else -> 1
-                        }
-                        add(Candidate(gIdx, i, score))
-                    }
-                }
+                pendingSubSelection = SubtitleOption.ENGLISH
             }
-
-            val best = candidates.maxByOrNull { it.score } ?: return
-            val group = textGroups[best.g]
-            val override = TrackSelectionOverride(group.mediaTrackGroup, listOf(best.t))
-            exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
-                .buildUpon()
-                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-                .clearOverridesOfType(C.TRACK_TYPE_TEXT)
-                .addOverride(override)
-                .build()
         }
     })
-
-
 
 
 
@@ -1458,45 +1524,12 @@ fun MainPlayerScreen(
                                     Row(
                                         modifier = Modifier
                                             .clickable {
-                                                // pause and open menu
+                                                // pause and open menu; respect whatever pendingSubSelection was set to
                                                 exoPlayer.playWhenReady = false
-
-                                                val isTextDisabled =
-                                                    exoPlayer.trackSelectionParameters
-                                                        .disabledTrackTypes.contains(C.TRACK_TYPE_TEXT)
-
-                                                val textGroups =
-                                                    exoPlayer.currentTracks.groups.filter { it.type == C.TRACK_TYPE_TEXT }
-
-                                                // is any text track currently selected?
-                                                val hasAnyTextSelected = textGroups.any { g ->
-                                                    (0 until g.length).any { i ->
-                                                        g.isTrackSelected(
-                                                            i
-                                                        )
-                                                    }
-                                                }
-
-                                                // is the selected text track the external SRT?
-                                                val isExternalSelected = textGroups.any { g ->
-                                                    (0 until g.length).any { i ->
-                                                        g.isTrackSelected(i) && run {
-                                                            val f = g.getTrackFormat(i)
-                                                            f.id == "ext_srt" || f.label == "External SRT"
-                                                        }
-                                                    }
-                                                }
-
-                                                pendingSubSelection = when {
-                                                    isTextDisabled || !hasAnyTextSelected -> SubtitleOption.OFF
-                                                    isExternalSelected -> SubtitleOption.INDONESIAN
-                                                    else -> SubtitleOption.ENGLISH
-                                                }
-
                                                 showSubtitleMenu = true
                                                 isControlsVisible.value = true
-
-                                            },
+                                            }
+                                        ,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Icon(
@@ -1557,40 +1590,14 @@ fun MainPlayerScreen(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Row(
-                                        modifier = Modifier.clickable {
-                                            // pause and open menu
-                                            exoPlayer.playWhenReady = false
-
-                                            val isTextDisabled = exoPlayer.trackSelectionParameters
-                                                .disabledTrackTypes.contains(C.TRACK_TYPE_TEXT)
-
-                                            val textGroups =
-                                                exoPlayer.currentTracks.groups.filter { it.type == C.TRACK_TYPE_TEXT }
-
-                                            // is any text track currently selected?
-                                            val hasAnyTextSelected = textGroups.any { g ->
-                                                (0 until g.length).any { i -> g.isTrackSelected(i) }
+                                        modifier = Modifier
+                                            .clickable {
+                                                // pause and open menu; respect whatever pendingSubSelection was set to
+                                                exoPlayer.playWhenReady = false
+                                                showSubtitleMenu = true
+                                                isControlsVisible.value = true
                                             }
-
-                                            // is the selected text track the external SRT?
-                                            val isExternalSelected = textGroups.any { g ->
-                                                (0 until g.length).any { i ->
-                                                    g.isTrackSelected(i) && run {
-                                                        val f = g.getTrackFormat(i)
-                                                        f.id == "ext_srt" || f.label == "External SRT"
-                                                    }
-                                                }
-                                            }
-
-                                            pendingSubSelection = when {
-                                                isTextDisabled || !hasAnyTextSelected -> SubtitleOption.OFF
-                                                isExternalSelected -> SubtitleOption.INDONESIAN
-                                                else -> SubtitleOption.ENGLISH
-                                            }
-
-                                            showSubtitleMenu = true
-                                            isControlsVisible.value = true
-                                        },
+                                        ,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Icon(
@@ -2035,7 +2042,10 @@ fun MainPlayerScreen(
 
                     row("Off", SubtitleOption.OFF)
                     row("English", SubtitleOption.ENGLISH)
-                    row("Indonesian", SubtitleOption.INDONESIAN, enabled = hasExternalSrt)
+
+                    if (hasExternalSrt) {
+                        row("Indonesian", SubtitleOption.INDONESIAN)
+                    }
 
                     Spacer(Modifier.height(24.dp))
 
