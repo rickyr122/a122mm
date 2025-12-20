@@ -257,12 +257,14 @@ class AuthRepository(
 
     suspend fun confirmTvPair(
         context: Context,
-        deviceId: String,
         pairCode: String
     ): Result<Unit> = runCatching {
-        val res = authedApi.tvPairConfirm(deviceId, pairCode)
-        if (!res.isSuccessful) error("HTTP ${res.code()}")
+        val res = authedApi.tvPairConfirm(pairCode)
+        if (!res.isSuccessful) {
+            throw Exception("HTTP ${res.code()}")
+        }
     }
+
 
 
 }

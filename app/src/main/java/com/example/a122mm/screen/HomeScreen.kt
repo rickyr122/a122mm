@@ -880,7 +880,6 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
                 onConfirm = {
                     repo.confirmTvPair(
                         context = context,
-                        deviceId = deviceId,
                         pairCode = info.pairCode
                     ).isSuccess
                 },
