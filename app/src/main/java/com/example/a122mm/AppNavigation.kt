@@ -1,5 +1,6 @@
 package com.example.a122mm
 
+import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -12,6 +13,7 @@ import com.example.a122mm.auth.RequireAuth
 import com.example.a122mm.components.ViewMovieDetail
 import com.example.a122mm.dataclass.HomeViewModel
 import com.example.a122mm.screen.AccountSettingsScreen
+import com.example.a122mm.screen.AllSetPage
 import com.example.a122mm.screen.AuthScreen
 import com.example.a122mm.screen.ChangePasswordScreen
 import com.example.a122mm.screen.ChooseIconScreen
@@ -67,8 +69,6 @@ fun AppNavigation(
             ErrorRoute(navController)
         }
 
-
-
         composable("movie/{movieId}") { backStackEntry ->
             val movieId = backStackEntry.arguments?.getString("movieId") ?: ""
             // We grab the same ViewModel instance as in HomePage
@@ -118,6 +118,35 @@ fun AppNavigation(
                 )
             }
         }
+
+//        composable("scan") {
+//            ScanPage(navController = navController)
+//        }
+
+//        composable(
+//            route = "scan_confirm/{pairCode}/{deviceId}/{deviceName}",
+//            arguments = listOf(
+//                navArgument("pairCode") { type = NavType.StringType },
+//                navArgument("deviceId") { type = NavType.StringType },
+//                navArgument("deviceName") { type = NavType.StringType }
+//            )
+//        ) { backStackEntry ->
+//            val pairCode = backStackEntry.arguments?.getString("pairCode") ?: ""
+//            val deviceId = backStackEntry.arguments?.getString("deviceId") ?: ""
+//            val deviceName = backStackEntry.arguments?.getString("deviceName")?.let { Uri.decode(it) } ?: ""
+//
+//            ConfirmPairPage(
+//                navController = navController,
+//                pairCode = pairCode,
+//                deviceId = deviceId,
+//                deviceName = deviceName
+//            )
+//        }
+//
+//        composable("scan_done") {
+//            AllSetPage(navController = navController)
+//        }
+
 
     }
 }

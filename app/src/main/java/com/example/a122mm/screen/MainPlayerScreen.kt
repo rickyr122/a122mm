@@ -840,10 +840,10 @@ fun MainPlayerScreen(
             }
 
             // Tiny debug log so we see what Exo thinks
-            Log.d(
-                "SubDebug",
-                "hasExternalSrt=$hasExternalSrt, textGroups=${textGroups.size}, hasUsableText=$hasUsableText"
-            )
+//            Log.d(
+//                "SubDebug",
+//                "hasExternalSrt=$hasExternalSrt, textGroups=${textGroups.size}, hasUsableText=$hasUsableText"
+//            )
 
 
             // ───────────────────────

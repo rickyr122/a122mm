@@ -142,4 +142,11 @@ interface AuthApiService {
         @Field("username") username: String
     ): Response<GenericRes>
 
+    @POST("tv_pair_confirm.php")
+    suspend fun tvPairConfirm(
+        @Query("device_id") deviceId: String,
+        @Query("pair_code") pairCode: String
+    ): Response<Unit>
+
+
 }

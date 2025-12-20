@@ -1,19 +1,24 @@
 package com.example.a122mm.screen
 
+import ScanPage
 import android.app.Activity
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.net.Uri
 import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -27,6 +32,7 @@ import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -52,6 +58,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -71,6 +78,7 @@ import androidx.compose.material.icons.outlined.Devices
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.VideoLibrary
 import androidx.compose.material3.Button
@@ -128,10 +136,26 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import androidx.compose.material.icons.outlined.QrCodeScanner
+import androidx.compose.material.icons.outlined.Tv
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.compose.ui.graphics.vector.path
 import com.example.a122mm.R
+import com.example.a122mm.auth.AuthRepository
 import com.example.a122mm.auth.ProfileViewModel2
+import com.example.a122mm.auth.TokenStore
+import com.example.a122mm.dataclass.AuthNetwork
 import com.example.a122mm.dataclass.BottomNavItem
 import com.example.a122mm.helper.setScreenOrientation
+import com.example.a122mm.icon.LucideScanLine
 import com.example.a122mm.pages.HighlightsPage
 import com.example.a122mm.pages.HomePage
 import com.example.a122mm.pages.MoviePage
@@ -158,6 +182,8 @@ data class UiDevice(
     val isThisDevice: Boolean
 )
 
+data class PairInfo(val pairCode: String, val deviceName: String)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
@@ -182,6 +208,14 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
     var showUpdateDialog by remember { mutableStateOf(false) }
     var updateProgress by remember { mutableStateOf(0) }
     var updateError by remember { mutableStateOf<String?>(null) }
+
+    var showScan by remember { mutableStateOf(false) }
+    var pendingPair by remember { mutableStateOf<PairInfo?>(null) }
+    var showDone by remember { mutableStateOf(false) }
+
+    val context = LocalContext.current
+    val deviceId = remember { getDeviceId(context) }
+
 
     BackHandler {
         when {
@@ -246,7 +280,7 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     val isTablet = configuration.screenWidthDp >= 600
 
-    val context = LocalContext.current
+    //val context = LocalContext.current
     LaunchedEffect(Unit) {
         if (!isTablet) context.setScreenOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT)
     }
@@ -595,14 +629,29 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
                             )
 
                             if (selectedItem == 3) {
-                                Icon(
-                                    imageVector = Icons.Filled.Menu, // or painterResource(R.drawable.ic_menu)
-                                    contentDescription = "Menu",
-                                    tint = Color.White,
-                                    modifier = Modifier
-                                        .size(if (isTablet) 36.dp else 28.dp)
-                                        .clickable { showSettings = true  }
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+
+                                    Icon(
+                                        imageVector = LucideScanLine,
+                                        contentDescription = "Scan",
+                                        tint = Color.White,
+                                        modifier = Modifier
+                                            .size(if (isTablet) 32.dp else 24.dp)
+                                            .clickable { showScan = true }
+                                    )
+
+
+                                    Spacer(Modifier.width(6.dp))
+
+                                    Icon(
+                                        imageVector = Icons.Filled.Menu,
+                                        contentDescription = "Menu",
+                                        tint = Color.White,
+                                        modifier = Modifier
+                                            .size(if (isTablet) 36.dp else 28.dp)
+                                            .clickable { showSettings = true }
+                                    )
+                                }
                             }
                         }
 
@@ -813,6 +862,42 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
                 }
             }
         }
+
+        if (showScan) {
+            ScanPage(
+                onClose = { showScan = false },
+                onScanned = { pairCode, tvName ->
+                    showScan = false
+                    pendingPair = PairInfo(pairCode, tvName)
+                }
+            )
+        }
+
+        pendingPair?.let { info ->
+            ScanConfirmDialog(
+                tvName = info.deviceName,
+                pairCode = info.pairCode,
+                onConfirm = {
+                    repo.confirmTvPair(
+                        context = context,
+                        deviceId = deviceId,
+                        pairCode = info.pairCode
+                    ).isSuccess
+                },
+                onCancel = { pendingPair = null },
+                onSuccess = {
+                    pendingPair = null
+                    showDone = true
+                }
+            )
+        }
+
+        if (showDone) {
+            ScanDoneDialog(
+                onDismiss = { showDone = false }
+            )
+        }
+
     }
 }
 
@@ -1700,3 +1785,49 @@ private fun DeviceRow(
         }
     }
 }
+
+
+
+@Composable
+fun AllSetPage(navController: NavController) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(
+            modifier = Modifier
+                .widthIn(max = 520.dp)
+                .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(18.dp))
+                .padding(22.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Replace with your own drawable if you want
+            Icon(
+                imageVector = Icons.Outlined.Tv,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(90.dp)
+            )
+
+            Spacer(Modifier.height(14.dp))
+
+            Text("All set!", color = Color.White, fontSize = 34.sp, fontWeight = FontWeight.Bold)
+
+            Spacer(Modifier.height(10.dp))
+
+            Text(
+                "Now you can enjoy 122 Movies on Smart TV.",
+                color = Color.White.copy(alpha = 0.75f),
+                fontSize = 16.sp
+            )
+
+            Spacer(Modifier.height(18.dp))
+
+            Button(
+                onClick = { navController.popBackStack() },
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color.White)
+            ) {
+                Text("Dismiss", color = Color.Black)
+            }
+        }
+    }
+}
+
