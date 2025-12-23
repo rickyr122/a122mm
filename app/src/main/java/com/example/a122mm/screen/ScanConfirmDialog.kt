@@ -23,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -39,6 +40,9 @@ fun ScanConfirmDialog(
 ) {
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+
+    val configuration = LocalConfiguration.current
+    val isTablet = configuration.screenWidthDp >= 600
 
     Dialog(onDismissRequest = onCancel) {
         Box(
@@ -59,7 +63,7 @@ fun ScanConfirmDialog(
                 Text(
                     text = "To sign in, please confirm the code\nbelow matches this TV: $tvName",
                     color = Color.White.copy(alpha = 0.85f),
-                    fontSize = 15.sp,
+                    fontSize = if (isTablet) 18.sp else 15.sp,
                     textAlign = TextAlign.Center
                 )
 
@@ -68,9 +72,10 @@ fun ScanConfirmDialog(
                 Text(
                     text = pairCode,
                     color = Color.White,
-                    fontSize = 36.sp,
+                    fontSize = if (isTablet) 32.sp else 24.sp,
                     fontWeight = FontWeight.Bold,
-                    letterSpacing = 6.sp
+                    letterSpacing = if (isTablet) 6.sp else 4.sp,
+                    textAlign = TextAlign.Center
                 )
 
                 Spacer(Modifier.height(22.dp))
@@ -100,6 +105,7 @@ fun ScanConfirmDialog(
                 ) {
                     Text(
                         text = if (loading) "Signing in…" else "Sign In to TV",
+                        fontSize = if (isTablet) 18.sp else 15.sp,
                         color = Color.Black,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -117,7 +123,7 @@ fun ScanConfirmDialog(
                         containerColor = Color(0xFF3A3A3A)
                     )
                 ) {
-                    Text("Cancel", color = Color.White)
+                    Text("Cancel", color = Color.White, fontSize = if (isTablet) 18.sp else 15.sp)
                 }
             }
         }
@@ -128,6 +134,6 @@ fun ScanConfirmDialog(
         val ok = onConfirm()
         loading = false
         if (ok) onSuccess()
-        else error = "Failed to confirm TV"
+        else error = "Failed to confirm TV: Code expired please try again"
     }
 }

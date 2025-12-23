@@ -22,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -30,6 +31,9 @@ import androidx.compose.ui.window.Dialog
 
 @Composable
 fun ScanDoneDialog(onDismiss: () -> Unit) {
+    val configuration = LocalConfiguration.current
+    val isTablet = configuration.screenWidthDp >= 600
+
     Dialog(onDismissRequest = onDismiss) {
         Box(
             Modifier
@@ -58,7 +62,7 @@ fun ScanDoneDialog(onDismiss: () -> Unit) {
                 Text(
                     "All set!",
                     color = Color.White,
-                    fontSize = 34.sp,
+                    fontSize = if (isTablet) 32.sp else 24.sp,
                     fontWeight = FontWeight.Bold
                 )
 
@@ -67,7 +71,7 @@ fun ScanDoneDialog(onDismiss: () -> Unit) {
                 Text(
                     "Now you can enjoy 122 Movies\non your Smart TV.",
                     color = Color.White.copy(alpha = 0.75f),
-                    fontSize = 15.sp,
+                    fontSize = if (isTablet) 18.sp else 15.sp,
                     textAlign = TextAlign.Center
                 )
 
@@ -82,7 +86,7 @@ fun ScanDoneDialog(onDismiss: () -> Unit) {
                         containerColor = Color.White
                     )
                 ) {
-                    Text("Dismiss", color = Color.Black)
+                    Text("Dismiss", color = Color.Black, fontSize = if (isTablet) 18.sp else 15.sp)
                 }
             }
         }

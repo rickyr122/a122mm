@@ -1,4 +1,4 @@
-    package com.example.a122mm
+package com.example.a122mm
 
 import android.graphics.drawable.ColorDrawable
 import android.os.Build

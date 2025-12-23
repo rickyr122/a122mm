@@ -1,4 +1,5 @@
 
+import android.content.res.Configuration
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -17,8 +18,15 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.shape.CircleShape
@@ -47,6 +55,7 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -59,6 +68,7 @@ import androidx.core.net.toUri
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
+import kotlin.math.min
 
 @Composable
 fun ScanPage(
@@ -68,6 +78,10 @@ fun ScanPage(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var hasScanned by remember { mutableStateOf(false) }
+
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val isTablet = configuration.screenWidthDp >= 600
 
     val haptic = LocalHapticFeedback.current
 
@@ -83,10 +97,11 @@ fun ScanPage(
         launcher.launch(android.Manifest.permission.CAMERA)
     }
 
-    // 🔹 ROOT (full bleed)
+    val insets = WindowInsets.safeDrawing.asPaddingValues()
+
     Box(modifier = Modifier.fillMaxSize()) {
 
-        // --- Camera (edge to edge) ---
+        // ───────── Camera (edge-to-edge, untouched) ─────────
         if (granted) {
             AndroidView(
                 modifier = Modifier.fillMaxSize(),
@@ -125,7 +140,9 @@ fun ScanPage(
                                         val code = extractPairCode(raw)
                                         if (!code.isNullOrBlank()) {
                                             hasScanned = true
-                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            haptic.performHapticFeedback(
+                                                HapticFeedbackType.LongPress
+                                            )
                                             onScanned(code, "Smart TV")
                                         }
                                     }
@@ -149,40 +166,21 @@ fun ScanPage(
             )
         }
 
-        // 🔹 SAFE UI LAYER (respects system bars)
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .systemBarsPadding() // ✅ handles status + nav bar
-        ) {
-
-            // Overlay (window + scan line)
-            ScannerOverlay(
-                modifier = Modifier.fillMaxSize(),
-                windowWidthFraction = 0.82f,
-                windowAspectRatio = 1f,
-                cornerRadius = 22.dp,
-                dimAlpha = 0.60f,
-                borderWidth = 2.dp,
-                showScanLine = true,
-                instructionText = "Make sure your QR code is in the center."
-            )
-
-            // Back button (now safe)
-            Icon(
-                imageVector = Icons.Default.ArrowBack,
-                contentDescription = "Back",
-                tint = Color.White,
-                modifier = Modifier
-                    .padding(16.dp)
-                    .size(34.dp)
-                    .align(Alignment.TopStart)
-                    .clip(CircleShape)
-                    .background(Color.Black.copy(alpha = 0.25f))
-                    .clickable { onClose() }
-                    .padding(6.dp)
-            )
-        }
+        // ───────── Overlay + UI (safe-aware) ─────────
+        ScannerOverlay(
+            modifier = Modifier.fillMaxSize(),
+            windowWidthFraction = 0.82f,
+            windowAspectRatio = 1f,
+            cornerRadius = 22.dp,
+            dimAlpha = 0.60f,
+            borderWidth = 2.dp,
+            showScanLine = true,
+            instructionText = "Make sure your QR code is in the center.",
+//            topInset = if (isTablet && isLandscape) insets.calculateTopPadding() else 0.dp,
+//            bottomInset = if (isTablet && isLandscape) insets.calculateBottomPadding() else 0.dp,
+//            limitHeight = isTablet && isLandscape,
+            onClose = onClose
+        )
     }
 }
 
@@ -195,44 +193,59 @@ private fun ScannerOverlay(
     dimAlpha: Float,
     borderWidth: Dp,
     showScanLine: Boolean,
-    instructionText: String
+    instructionText: String,
+    onClose: () -> Unit
 ) {
     val density = LocalDensity.current
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val isTablet = configuration.screenWidthDp >= 600
 
-    // Infinite scan line animation (top -> bottom -> top)
+    val insets = WindowInsets.safeDrawing.asPaddingValues()
+
     val transition = rememberInfiniteTransition(label = "scanLine")
     val anim by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
+        0f, 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1400, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
+            tween(1400, easing = LinearEasing),
+            RepeatMode.Reverse
         ),
-        label = "scanLinePos"
+        label = "scanLine"
     )
 
-    Box(modifier) {
+    Box(modifier.fillMaxSize()) {
+
+        /* =========================
+           CANVAS (FULLSCREEN DIM)
+           ========================= */
         Canvas(Modifier.fillMaxSize()) {
-            val w = size.width
-            val h = size.height
+            val screenW = size.width
+            val screenH = size.height
 
-            val windowW = w * windowWidthFraction
-            val windowH = windowW / windowAspectRatio
+            val topInsetPx =
+                if (isTablet && isLandscape) with(density) { insets.calculateTopPadding().toPx() }
+                else 0f
 
-            val left = (w - windowW) / 2f
-            val top = (h - windowH) / 2f
-            val right = left + windowW
-            val bottom = top + windowH
+            val bottomInsetPx =
+                if (isTablet && isLandscape) with(density) { insets.calculateBottomPadding().toPx() }
+                else 0f
+
+            val safeHeight = screenH - topInsetPx - bottomInsetPx
+
+            val windowW = screenW * windowWidthFraction
+            val desiredWindowH = windowW / windowAspectRatio
+            val windowH = min(desiredWindowH, safeHeight * 0.95f)
+
+            val left = (screenW - windowW) / 2f
+            val top = topInsetPx + (safeHeight - windowH) / 2f
 
             val cr = with(density) { cornerRadius.toPx() }
             val bw = with(density) { borderWidth.toPx() }
 
-            // 1) Draw dim over whole screen
-            drawRect(
-                color = Color.Black.copy(alpha = dimAlpha)
-            )
+            // Dim
+            drawRect(Color.Black.copy(alpha = dimAlpha))
 
-            // 2) "Clear" the center window by drawing it with BlendMode.Clear
+            // Clear window
             drawRoundRect(
                 color = Color.Transparent,
                 topLeft = Offset(left, top),
@@ -241,35 +254,60 @@ private fun ScannerOverlay(
                 blendMode = BlendMode.Clear
             )
 
-            // 3) Draw a white border around the window
+            // Border
             drawRoundRect(
                 color = Color.White.copy(alpha = 0.65f),
                 topLeft = Offset(left, top),
                 size = Size(windowW, windowH),
                 cornerRadius = CornerRadius(cr, cr),
-                style = Stroke(width = bw)
+                style = Stroke(bw)
             )
 
-            // 4) Scan line
+            // Scan line
             if (showScanLine) {
-                val y = top + (windowH * anim)
+                val y = top + windowH * anim
                 drawLine(
-                    color = Color.White.copy(alpha = 0.75f),
-                    start = Offset(left + (windowW * 0.08f), y),
-                    end = Offset(right - (windowW * 0.08f), y),
+                    Color.White.copy(alpha = 0.75f),
+                    Offset(left + windowW * 0.08f, y),
+                    Offset(left + windowW * 0.92f, y),
                     strokeWidth = with(density) { 2.dp.toPx() }
                 )
             }
         }
 
-        // Instruction text at bottom (like reference)
+        /* =========================
+           BACK ARROW
+           ========================= */
+        Icon(
+            imageVector = Icons.Default.ArrowBack,
+            contentDescription = "Back",
+            tint = Color.White,
+            modifier = Modifier
+                .padding(
+                    start = 16.dp,
+                    top = insets.calculateTopPadding() +
+                            if (isTablet && isLandscape) 8.dp else 16.dp
+                )
+                .size(if (isTablet) 44.dp else 34.dp)
+                .clip(CircleShape)
+                .background(Color.Black.copy(alpha = 0.25f))
+                .clickable(onClick = onClose)
+                .padding(6.dp)
+        )
+
+        /* =========================
+           INSTRUCTION TEXT
+           ========================= */
         Text(
             text = instructionText,
             color = Color.White.copy(alpha = 0.85f),
-            fontSize = 15.sp,
+            fontSize = if (isTablet) 18.sp else 15.sp,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 42.dp)
+                .padding(
+                    bottom = insets.calculateBottomPadding() +
+                            if (isTablet && isLandscape) 48.dp else 24.dp
+                )
         )
     }
 }
