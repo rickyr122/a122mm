@@ -64,6 +64,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -71,6 +72,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.example.a122mm.R
 import com.example.a122mm.helper.setScreenOrientation
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
@@ -332,7 +334,8 @@ private fun ScannerOverlay(
         // TOP RIGHT — FLASH BUTTON
         // =======================
         Icon(
-            imageVector = if (torchOn) Icons.Default.FlashOn else Icons.Default.FlashOff,
+            painter = painterResource(id = if (torchOn) R.drawable.flashlight_on_ic  else R.drawable.flashlight_off_ic),
+            //imageVector = if (torchOn) Icons.Default.FlashOn else Icons.Default.FlashOff,
             contentDescription = "Flash",
             tint = Color.White,
             modifier = Modifier

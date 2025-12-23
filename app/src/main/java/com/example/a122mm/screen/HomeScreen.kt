@@ -282,7 +282,12 @@ fun HomeScreen(modifier: Modifier = Modifier, navController: NavController) {
 
     //val context = LocalContext.current
     LaunchedEffect(Unit) {
-        if (!isTablet) context.setScreenOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT)
+        if (!isTablet) {
+            context.setScreenOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT)
+        } else {
+            context.setScreenOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED)
+        }
+
     }
 
     val view = LocalView.current
@@ -1707,11 +1712,11 @@ private fun DeviceRow(
             ) {
                 when (device.deviceType) {
                     "tv" -> {
-                        Icon(
-                            imageVector = Icons.Outlined.VideoLibrary,
+                        Image(
+                            painter = painterResource(id = R.drawable.tv_ic),
                             contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(20.dp),
+                            colorFilter = ColorFilter.tint(Color.White)
                         )
                     }
                     "tablet" -> {
