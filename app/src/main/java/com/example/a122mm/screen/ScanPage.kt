@@ -1,8 +1,10 @@
 
+import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
@@ -33,9 +35,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.FlashOff
+import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -66,6 +71,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.example.a122mm.helper.setScreenOrientation
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
 import kotlin.math.min
@@ -84,6 +90,9 @@ fun ScanPage(
     val isTablet = configuration.screenWidthDp >= 600
 
     val haptic = LocalHapticFeedback.current
+    var camera: Camera? by remember { mutableStateOf(null) }
+    var torchOn by remember { mutableStateOf(false) }
+
 
     var granted by remember { mutableStateOf(false) }
     val launcher = rememberLauncherForActivityResult(
@@ -98,6 +107,10 @@ fun ScanPage(
     }
 
     val insets = WindowInsets.safeDrawing.asPaddingValues()
+
+    LaunchedEffect(Unit) {
+        if (!isTablet) context.setScreenOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT)
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
 
@@ -152,13 +165,16 @@ fun ScanPage(
                             } else imageProxy.close()
                         }
 
+
+
                         cameraProvider.unbindAll()
-                        cameraProvider.bindToLifecycle(
+                        camera = cameraProvider.bindToLifecycle(
                             lifecycleOwner,
                             CameraSelector.DEFAULT_BACK_CAMERA,
                             preview,
                             analysis
                         )
+
                     }, ContextCompat.getMainExecutor(ctx))
 
                     previewView
@@ -176,12 +192,25 @@ fun ScanPage(
             borderWidth = 2.dp,
             showScanLine = true,
             instructionText = "Make sure your QR code is in the center.",
-//            topInset = if (isTablet && isLandscape) insets.calculateTopPadding() else 0.dp,
-//            bottomInset = if (isTablet && isLandscape) insets.calculateBottomPadding() else 0.dp,
-//            limitHeight = isTablet && isLandscape,
+            topInset = if (isTablet && isLandscape) insets.calculateTopPadding() else 0.dp,
+            bottomInset = if (isTablet && isLandscape) insets.calculateBottomPadding() else 0.dp,
+            limitHeight = isTablet && isLandscape,
+            torchOn = torchOn,
+            onToggleFlash = {
+                torchOn = !torchOn
+                camera?.cameraControl?.enableTorch(torchOn)
+            },
             onClose = onClose
         )
+
     }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            camera?.cameraControl?.enableTorch(false)
+        }
+    }
+
 }
 
 @Composable
@@ -194,6 +223,11 @@ private fun ScannerOverlay(
     borderWidth: Dp,
     showScanLine: Boolean,
     instructionText: String,
+    topInset: Dp,
+    bottomInset: Dp,
+    limitHeight: Boolean,
+    torchOn: Boolean,
+    onToggleFlash: () -> Unit,
     onClose: () -> Unit
 ) {
     val density = LocalDensity.current
@@ -201,51 +235,50 @@ private fun ScannerOverlay(
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     val isTablet = configuration.screenWidthDp >= 600
 
-    val insets = WindowInsets.safeDrawing.asPaddingValues()
-
     val transition = rememberInfiniteTransition(label = "scanLine")
     val anim by transition.animateFloat(
-        0f, 1f,
+        initialValue = 0f,
+        targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            tween(1400, easing = LinearEasing),
-            RepeatMode.Reverse
+            animation = tween(1400, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
         ),
-        label = "scanLine"
+        label = "scanLinePos"
     )
 
-    Box(modifier.fillMaxSize()) {
+    Box(modifier) {
 
-        /* =========================
-           CANVAS (FULLSCREEN DIM)
-           ========================= */
+        // =======================
+        // CAMERA OVERLAY CANVAS
+        // =======================
         Canvas(Modifier.fillMaxSize()) {
-            val screenW = size.width
-            val screenH = size.height
+            val w = size.width
+            val h = size.height
 
-            val topInsetPx =
-                if (isTablet && isLandscape) with(density) { insets.calculateTopPadding().toPx() }
-                else 0f
+            val topInsetPx = with(density) { topInset.toPx() }
+            val bottomInsetPx = with(density) { bottomInset.toPx() }
 
-            val bottomInsetPx =
-                if (isTablet && isLandscape) with(density) { insets.calculateBottomPadding().toPx() }
-                else 0f
+            val safeHeight = h - topInsetPx - bottomInsetPx
 
-            val safeHeight = screenH - topInsetPx - bottomInsetPx
-
-            val windowW = screenW * windowWidthFraction
+            val windowW = w * windowWidthFraction
             val desiredWindowH = windowW / windowAspectRatio
-            val windowH = min(desiredWindowH, safeHeight * 0.95f)
 
-            val left = (screenW - windowW) / 2f
+            val windowH =
+                if (limitHeight) min(desiredWindowH, safeHeight * 0.95f)
+                else desiredWindowH
+
+            val left = (w - windowW) / 2f
             val top = topInsetPx + (safeHeight - windowH) / 2f
+            val right = left + windowW
+            val bottom = top + windowH
 
             val cr = with(density) { cornerRadius.toPx() }
             val bw = with(density) { borderWidth.toPx() }
 
-            // Dim
+            // Dim background
             drawRect(Color.Black.copy(alpha = dimAlpha))
 
-            // Clear window
+            // Clear scan window
             drawRoundRect(
                 color = Color.Transparent,
                 topLeft = Offset(left, top),
@@ -260,57 +293,74 @@ private fun ScannerOverlay(
                 topLeft = Offset(left, top),
                 size = Size(windowW, windowH),
                 cornerRadius = CornerRadius(cr, cr),
-                style = Stroke(bw)
+                style = Stroke(width = bw)
             )
 
             // Scan line
             if (showScanLine) {
                 val y = top + windowH * anim
                 drawLine(
-                    Color.White.copy(alpha = 0.75f),
-                    Offset(left + windowW * 0.08f, y),
-                    Offset(left + windowW * 0.92f, y),
+                    color = Color.White.copy(alpha = 0.75f),
+                    start = Offset(left + windowW * 0.08f, y),
+                    end = Offset(right - windowW * 0.08f, y),
                     strokeWidth = with(density) { 2.dp.toPx() }
                 )
             }
         }
 
-        /* =========================
-           BACK ARROW
-           ========================= */
+        // =======================
+        // TOP LEFT — BACK BUTTON
+        // =======================
+        val iconSize = if (isTablet) 42.dp else 34.dp
+
         Icon(
             imageVector = Icons.Default.ArrowBack,
             contentDescription = "Back",
             tint = Color.White,
             modifier = Modifier
-                .padding(
-                    start = 16.dp,
-                    top = insets.calculateTopPadding() +
-                            if (isTablet && isLandscape) 8.dp else 16.dp
-                )
-                .size(if (isTablet) 44.dp else 34.dp)
+                .align(Alignment.TopStart)
+                .systemBarsPadding()
+                .padding(start = 16.dp, top = 16.dp)
+                .size(iconSize)
                 .clip(CircleShape)
                 .background(Color.Black.copy(alpha = 0.25f))
-                .clickable(onClick = onClose)
+                .clickable { onClose() }
                 .padding(6.dp)
         )
 
-        /* =========================
-           INSTRUCTION TEXT
-           ========================= */
+        // =======================
+        // TOP RIGHT — FLASH BUTTON
+        // =======================
+        Icon(
+            imageVector = if (torchOn) Icons.Default.FlashOn else Icons.Default.FlashOff,
+            contentDescription = "Flash",
+            tint = Color.White,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .systemBarsPadding()
+                .padding(end = 16.dp, top = 16.dp)
+                .size(iconSize)
+                .clip(CircleShape)
+                .background(Color.Black.copy(alpha = 0.25f))
+                .clickable { onToggleFlash() }
+                .padding(6.dp)
+        )
+
+        // =======================
+        // BOTTOM — INSTRUCTION TEXT
+        // =======================
         Text(
             text = instructionText,
             color = Color.White.copy(alpha = 0.85f),
             fontSize = if (isTablet) 18.sp else 15.sp,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(
-                    bottom = insets.calculateBottomPadding() +
-                            if (isTablet && isLandscape) 48.dp else 24.dp
-                )
+                .systemBarsPadding()
+                .padding(bottom = 24.dp)
         )
     }
 }
+
 
 // same helper as before
 private fun extractPairCode(raw: String?): String? {
