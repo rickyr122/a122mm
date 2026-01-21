@@ -1,8 +1,8 @@
 package com.example.a122mm.helper
 
+import android.net.Uri
 import okhttp3.HttpUrl
 import java.text.Normalizer
-import android.net.Uri
 
 //fun String.fixEncoding(): String {
 //    return this
@@ -44,6 +44,23 @@ fun String.fixEncoding(): String {
         .replace("[\u2018\u2019\u2032]".toRegex(), "'")
         .replace("[\u201C\u201D\u2033]".toRegex(), "\"")
 }
+
+fun String.convertContentRating(): String =
+    when (this) {
+        "G"     -> "All"
+        "PG"    -> "7+"
+        "PG-13" -> "13+"
+        "R"     -> "18+"
+        "NC-17" -> "21+"
+
+        "TV-PG" -> "All"
+        "TV-Y"  -> "3+"
+        "TV-Y7" -> "7+"
+        "TV-Y7-FV" -> "7+"
+        "TV-14" -> "14+"
+        "TV-MA" -> "18+"
+        else    -> "Unrated"
+    }
 
 
 fun encodeUrlSegments(full: String): String {

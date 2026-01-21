@@ -86,6 +86,7 @@ import com.example.a122mm.auth.TokenStore
 import com.example.a122mm.dataclass.AuthNetwork
 import com.example.a122mm.dataclass.NetworkModule
 import com.example.a122mm.dataclass.NetworkModule.mApiService
+import com.example.a122mm.helper.convertContentRating
 import com.example.a122mm.helper.fixEncoding
 import com.example.a122mm.helper.updateInList
 import com.example.a122mm.sections.CollectionItem
@@ -606,7 +607,7 @@ fun MovieDetailContent(
                                         .padding(horizontal = 6.dp, vertical = 2.dp)
                                 ) {
                                     Text(
-                                        text = movie.m_content,
+                                        text = movie.m_content.convertContentRating(),
                                         color = Color.White,
                                         style = MaterialTheme.typography.bodySmall
                                     )

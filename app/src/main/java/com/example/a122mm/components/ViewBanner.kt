@@ -243,6 +243,7 @@ fun ViewBanner(
                             model = if (!isTablet && !isLandscape) banner.cvrUrl else banner.bdropUrl,
                             contentDescription = banner.mId,
                             contentScale = ContentScale.Crop,
+                            alignment = Alignment.TopCenter,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .aspectRatio(bannerAspectRatio)

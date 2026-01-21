@@ -64,6 +64,7 @@ import com.example.a122mm.dataclass.ApiClient
 import com.example.a122mm.dataclass.AuthNetwork
 import com.example.a122mm.helper.InListCache
 import com.example.a122mm.helper.InListCache.get
+import com.example.a122mm.helper.convertContentRating
 import com.example.a122mm.helper.fixEncoding
 import com.example.a122mm.helper.updateInList
 import kotlinx.coroutines.Dispatchers
@@ -422,7 +423,7 @@ private fun HighlightCard(
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Text(
-                            text = item.mContent,
+                            text = item.mContent.convertContentRating(),
                             color = Color.White,
                             style = MaterialTheme.typography.labelMedium
                         )
