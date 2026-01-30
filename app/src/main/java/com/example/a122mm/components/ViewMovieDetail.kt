@@ -795,25 +795,24 @@ fun MovieDetailContent(
                                 },
                                 style = MaterialTheme.typography.bodySmall
                             )
-                            if (movie.m_id.startsWith("MOV")) {
-                                //Log.d("MovieDetail", "Director: '${movie.m_director.fixEncoding()}'")
-                                Text(
-                                    text = buildAnnotatedString {
-                                        withStyle(
-                                            style = SpanStyle(
-                                                color = Color(0xFFB3B3B3),
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                        ) {
-                                            append("Director: ")
-                                        }
-                                        withStyle(style = SpanStyle(color = Color(0xFFB3B3B3))) {
-                                            append(movie.m_director.fixEncoding())
-                                        }
-                                    },
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                            }
+                            val theMaster = if (movie.m_id.startsWith("MOV")) "Director: " else "Creator: "
+                            Text(
+                                text = buildAnnotatedString {
+                                    withStyle(
+                                        style = SpanStyle(
+                                            color = Color(0xFFB3B3B3),
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    ) {
+                                        append(theMaster)
+                                    }
+                                    withStyle(style = SpanStyle(color = Color(0xFFB3B3B3), fontSize = 12.sp)) {
+                                        append(movie.m_director.fixEncoding())
+                                    }
+                                },
+                                style = MaterialTheme.typography.bodySmall
+                            )
                         }
                         Spacer(Modifier.height(24.dp))
 
